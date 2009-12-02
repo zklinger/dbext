@@ -323,7 +323,7 @@ function! dbext#DB_getStoredProcBody()
     let query = input("Stored procedure: ")
 
     if strlen(query) == 0
-        call s:DB_warningMsg("dbext:No stored procedure to display")
+        call s:DB_warningMsg("dbext:No stored procedure name supplied.")
         return -1
     endif
     
@@ -340,8 +340,16 @@ function! dbext#DB_getStoredProcBody()
         endif
     endif
     
-    call dbext#DB_execFuncTypeWCheck('getStoredProcBody', query)
-    return 
+    " Run the query
+    let result =  dbext#DB_execFuncTypeWCheck('getStoredProcBody', query)
+
+    " Display result message
+    if result == ''
+        echo "Stored proc body for '". query . "' in paste register."
+    else
+        call s:DB_warningMsg("Stored procedure '" . query . "' not found.")
+    endif
+
 endfunction
 
 function! dbext#DB_newStoredProcBody()
@@ -349,7 +357,7 @@ function! dbext#DB_newStoredProcBody()
     let proc = input("New stored procedure: ")
 
     if strlen(proc) == 0
-        call s:DB_warningMsg("dbext:No stored procedure to create")
+        call s:DB_warningMsg("dbext:No stored procedure name supplied.")
         return -1
     endif
     
@@ -2761,9 +2769,6 @@ function! s:DB_MYSQL_getStoredProcBody(proc)
    \ "from mysql.proc " .
    \ "where db='". database . "' and name='" . a:proc . "'"
 
-   " Add query to internal history
-    call s:DB_historyAdd(query)
-    
     if query != ""
         " Do not return the result in the result buffer
         let orig_use_result_buffer = s:DB_get('use_result_buffer')
@@ -2779,21 +2784,29 @@ function! s:DB_MYSQL_getStoredProcBody(proc)
         let result = substitute(result, 'DELIMITER ; |','DELIMITER ;','g') 
         let result = substitute(result, '\r\n','\n','g') 
 
-        " Paste it into the origina buffer
-        exe "normal o" .result."\<C-R>"
+        " Paste result in the paste register
+        if &clipboard == 'unnamed'
+            let @* = result 
+        else
+            let @@ = result 
+        endif
 
         " Restore use_result_buffer setting
         call s:DB_set('use_result_buffer', orig_use_result_buffer)
 
-        return 
+        if result != ""
+            return 
+        else
+            return '-1'
+        endif
     else
        " If the query was cancelled, close the history 
        " window which was opened when we added the 
        " query above.
         call dbext#DB_windowClose(s:DB_resBufName())
+        return -1
     endif
 
-    return -1
 endfunction
 
 function! s:DB_MYSQL_newStoredProcBody(proc)
@@ -3524,11 +3537,17 @@ function! s:DB_SQLSRV_execSql(str)
                 \ ' -P' . s:DB_get("passwd") 
     endif
 
+    "Use charcter pipe as column separator. It is hardcoded here because
+    "if defined in .vimrc file as extra=-s "|" it ends up being parsed
+    "as -s "|
+    "Note the missing second double quote character that screws up things big
+    "time
     let cmd = cmd . 
                 \ s:DB_option(' -H ', s:DB_get("host"), ' ') .
                 \ s:DB_option(' -S ', s:DB_get("srvname"), ' ') .
                 \ s:DB_option(' -d ', s:DB_get("dbname"), ' ') .
                 \ s:DB_option(' ', s:DB_get("extra"), '') .
+                \ ' -s "|" ' . 
                 \ ' -i ' . s:dbext_tempfile
     let result = s:DB_runCmd(cmd, output, "")
 
