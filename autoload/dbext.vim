@@ -318,9 +318,11 @@ endfunction
 "}}}
 
 " Configuration {{{
+
+" Get the stored procedure body for a user specified stored procedure
 function! dbext#DB_getStoredProcBody()
     " Get name of stored procedure from the user
-    let query = input("Stored procedure: ")
+    let query = inputdialog("Enter stored procedure name:", '')
 
     if strlen(query) == 0
         call s:DB_warningMsg("dbext:No stored procedure name supplied.")
@@ -344,17 +346,24 @@ function! dbext#DB_getStoredProcBody()
     let result =  dbext#DB_execFuncTypeWCheck('getStoredProcBody', query)
 
     " Display result message
-    if result == ''
-        echo "Stored proc body for '". query . "' in paste register."
-    else
+    if result == '-1'
         call s:DB_warningMsg("Stored procedure '" . query . "' not found.")
+    else
+        " Paste result in the paste register
+        if &clipboard == 'unnamed'
+            let @* = result 
+        else
+            let @@ = result 
+        endif
+        echo "Stored proc body for '". query . "' in paste register."
     endif
 
 endfunction
 
+" Get the stored procedure template for a user specified stored procedure
 function! dbext#DB_newStoredProcBody()
     " Get name of stored procedure from the user
-    let proc = input("New stored procedure: ")
+    let proc = inputdialog("Enter new stored procedure name:", '')
 
     if strlen(proc) == 0
         call s:DB_warningMsg("dbext:No stored procedure name supplied.")
@@ -374,8 +383,17 @@ function! dbext#DB_newStoredProcBody()
         endif
     endif
     
-    call dbext#DB_execFuncTypeWCheck('newStoredProcBody', proc)
-    return 
+    " Get the stored proc template
+    let result =  dbext#DB_execFuncTypeWCheck('newStoredProcBody', proc)
+
+    " Paste result in the paste register
+    if &clipboard == 'unnamed'
+        let @* = result 
+    else
+        let @@ = result 
+    endif
+    echo "Stored proc template for '". proc . "' in paste register."
+
 endfunction
 
 "" Execute function, but prompt for parameters if necessary
@@ -2756,66 +2774,60 @@ function! s:DB_MYSQL_getDictionaryView() "{{{
 endfunction "}}}
 
 function! s:DB_MYSQL_getStoredProcBody(proc)
+    if dbext#DB_getWType('version') < '5'
+        call s:DB_warningMsg( 'dbext:MySQL does not support procedures' )
+        return '-1'
+    endif
 
     " Set query
     let database = s:DB_get("dbname")
     let query = "select  concat('DELIMITER $$\n\n', " .
-   \ "'DROP PROCEDURE IF EXISTS `', name, '` $$\n', " .
-   \ "'CREATE DEFINER=`', replace(definer, '@','`@`'), '` PROCEDURE `', name, '`(', " .
-   \ "cast(param_list as char), " .
-   \ "')\n', " .
-   \ "cast(body as char), ' $$\n\n', " .
-   \ "'DELIMITER ;') as 'AABBCCDDEEFFGG' " .
-   \ "from mysql.proc " .
-   \ "where db='". database . "' and name='" . a:proc . "'"
+    \ "'DROP PROCEDURE IF EXISTS `', name, '` $$\n', " .
+    \ "'CREATE DEFINER=`', replace(definer, '@','`@`'), '` PROCEDURE `', name, '`(', " .
+    \ "cast(param_list as char), " .
+    \ "')\n', " .
+    \ "cast(body as char), ' $$\n\n', " .
+    \ "'DELIMITER ;') as 'AABBCCDDEEFFGG' " .
+    \ "from mysql.proc " .
+    \ "where db='". database . "' and name='" . a:proc . "'"
 
-    if query != ""
-        " Do not return the result in the result buffer
-        let orig_use_result_buffer = s:DB_get('use_result_buffer')
-        call s:DB_set('use_result_buffer', 0)
+    " Do not return the result in the result buffer
+    let orig_use_result_buffer = s:DB_get('use_result_buffer')
+    call s:DB_set('use_result_buffer', 0)
 
-        " Run the query
-        let result = s:DB_MYSQL_execSql(query)
+    " Run the query
+    let result = s:DB_MYSQL_execSql(query)
 
-        " Remove decorations from result
-        let result = substitute(result, '+[+-]*\n','','g') 
-        let result = substitute(result, '| AABBCCDDEEFFGG *|', '','g')
-        let result = substitute(result, '| DELIMITER \$\$','DELIMITER $$','g') 
-        let result = substitute(result, 'DELIMITER ; |','DELIMITER ;','g') 
-        let result = substitute(result, '\r\n','\n','g') 
+    " Restore use_result_buffer setting
+    call s:DB_set('use_result_buffer', orig_use_result_buffer)
 
-        " Paste result in the paste register
-        if &clipboard == 'unnamed'
-            let @* = result 
-        else
-            let @@ = result 
-        endif
+    " Remove decorations from result
+    let result = substitute(result, '+[+-]*\n','','g') 
+    let result = substitute(result, '| AABBCCDDEEFFGG *|', '','g')
+    let result = substitute(result, '| DELIMITER \$\$','DELIMITER $$','g') 
+    let result = substitute(result, 'DELIMITER ; |','DELIMITER ;','g') 
+    let result = substitute(result, '\r\n','\n','g') 
 
-        " Restore use_result_buffer setting
-        call s:DB_set('use_result_buffer', orig_use_result_buffer)
-
-        if result != ""
-            return 
-        else
-            return '-1'
-        endif
+    if result != ""
+        return result
     else
-       " If the query was cancelled, close the history 
-       " window which was opened when we added the 
-       " query above.
-        call dbext#DB_windowClose(s:DB_resBufName())
-        return -1
+        return '-1'
     endif
 
 endfunction
 
 function! s:DB_MYSQL_newStoredProcBody(proc)
+    if dbext#DB_getWType('version') < '5'
+        call s:DB_warningMsg( 'dbext:MySQL does not support procedures' )
+        return '-1'
+    endif
+
     " Get defaults
     let user = s:DB_get('stored_proc_author')
     let definer = s:DB_get('MYSQL_definer')
     let definer = '`' . substitute(definer, '@', '`@`', '') . '`'
     
-    " Proc body
+    " Create stored procedure body
     let result = "DELIMITER $$\n"   . 
                  \ "\n"  . 
                  \ "DROP PROCEDURE IF EXISTS `" .a:proc. "` $$\n" . 
@@ -2836,17 +2848,7 @@ function! s:DB_MYSQL_newStoredProcBody(proc)
                  \ "\n" .  
                  \ "DELIMITER ;\n"
 
-    " Do not return the result in the result buffer
-    let orig_use_result_buffer = s:DB_get('use_result_buffer')
-    call s:DB_set('use_result_buffer', 0)
-
-    " Paste result into the origina buffer
-    exe "normal o" .result."\<C-R>"
-
-    " Restore use_result_buffer setting
-    call s:DB_set('use_result_buffer', orig_use_result_buffer)
-
-    return 
+    return result
 
 endfunction
 "}}}
@@ -3662,64 +3664,58 @@ endfunction "}}}
 function! s:DB_SQLSRV_getStoredProcBody(proc)
 
     " Set query
-   let query = "select text " .
+    let query = "set nocount on " .
+             \ "select text as ' ' " .
              \ "from sysobjects so " .
              \ "inner join syscomments sc " .
              \ "on so.id = sc.id " .
              \ "where name = '" . a:proc . "' " .
              \ "and xtype = 'P' " 
-
-   " Add query to internal history
-    call s:DB_historyAdd(query)
     
-    if query != ""
-        " Do not return the result in the result buffer
-        let orig_use_result_buffer = s:DB_get('use_result_buffer')
-        call s:DB_set('use_result_buffer', 0)
-        exe "normal ma"
+    " Do not return the result in the result buffer
+    let orig_use_result_buffer = s:DB_get('use_result_buffer')
+    call s:DB_set('use_result_buffer', 0)
 
-        " Run the query
-        let result = s:DB_SQLSRV_execSql(query)
+    " Run the query
+    let result = s:DB_SQLSRV_execSql(query)
 
-        " Remove decorations from result
-        let result = substitute(result, 'CREATE PROCEDURE','ALTER PROCEDURE','') 
+    " Restore use_result_buffer setting
+    call s:DB_set('use_result_buffer', orig_use_result_buffer)
 
-        " Paste it into the origina buffer
-        exe "normal o" .result."\<C-R>"
+    " Remove decorations from result
+    let result = substitute(result, ' *\n-*\n', '', '')
+    let result = substitute(result, ' *\n *\n$', '', '')
 
-        " Mark the end position
-        exe "normal mb"
-        " Go the the beginning of the definition and remove decoration
-        exe "normal 'ad2j"
-        " Insert some text
-        let header = "SET QUOTED_IDENTIFIER OFF\nGO\nSET ANSI_NULLS OFF\nGO\n"
-        exe "normal O" . header . "\<C-R>"
-        " Move to the end of the definition
-        exe "normal 'bd3k"
-
-        " Insert footer
-        let footer = "SET QUOTED_IDENTIFIER OFF\nGO\nSET ANSI_NULLS ON\nGO"
-        exe "normal O" . footer . "\<C-R>"
-
-        " Restore use_result_buffer setting
-        call s:DB_set('use_result_buffer', orig_use_result_buffer)
-
-        return 
-    else
-       " If the query was cancelled, close the history 
-       " window which was opened when we added the 
-       " query above.
-        call dbext#DB_windowClose(s:DB_resBufName())
+    " Does the stored procedure exits?
+    if result == "\n"
+        return '-1'
     endif
 
-    return -1
+    " Convert string pattern 'CREATE PROCEDURE' to 'ALTER PROCEDURE'
+    let result = substitute(result, ' *\cCREATE *\cPROCEDURE','ALTER PROCEDURE','') 
+
+    " Format the stored proc body
+    let result = "SET QUOTED_IDENTIFIER OFF \n" . 
+                 \ "GO\n" . 
+                 \ "SET ANSI_NULLS OFF \n" . 
+                 \ "GO\n" . 
+                 \ result .
+                 \ "GO\n" . 
+                 \ "SET QUOTED_IDENTIFIER OFF\n" . 
+                 \ "GO\n" . 
+                 \ "SET ANSI_NULLS ON \n" . 
+                 \ "GO\n" 
+
+    return result
+
 endfunction
 
 function! s:DB_SQLSRV_newStoredProcBody(proc)
+
     " Get defaults
     let user = s:DB_get('stored_proc_author')
     
-    " Proc body
+    " Create stored procedure body
     let result = "SET QUOTED_IDENTIFIER OFF \n" . 
                  \ "GO\n" . 
                  \ "SET ANSI_NULLS OFF \n" . 
@@ -3734,27 +3730,17 @@ function! s:DB_SQLSRV_newStoredProcBody(proc)
                  \ "-- ========================================================================\n" .
                  \ "CREATE PROCEDURE " .a:proc. "\n" . 
                  \ "(\n" . 
-                 \ "    @varX INT\n" . 
-                 \ ")\n" . 
+                 \ "  @varX INT\n" . 
+                 \ ")\n" .
                  \ "AS\n" .
                  \ "\n" .
-                 \ "\n" .
+                 \ "GO\n" . 
                  \ "SET QUOTED_IDENTIFIER OFF\n" . 
                  \ "GO\n" . 
                  \ "SET ANSI_NULLS ON \n" . 
                  \ "GO\n" 
 
-    " Do not return the result in the result buffer
-    let orig_use_result_buffer = s:DB_get('use_result_buffer')
-    call s:DB_set('use_result_buffer', 0)
-
-    " Paste result into the origina buffer
-    exe "normal o" .result."\<C-R>"
-
-    " Restore use_result_buffer setting
-    call s:DB_set('use_result_buffer', orig_use_result_buffer)
-
-    return 
+    return result
 
 endfunction
 "}}}
