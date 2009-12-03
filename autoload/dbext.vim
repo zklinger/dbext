@@ -2787,7 +2787,7 @@ function! s:DB_MYSQL_getStoredProcBody(proc)
     \ "cast(param_list as char), " .
     \ "')\n', " .
     \ "cast(body as char), ' $$\n\n', " .
-    \ "'DELIMITER ;') as 'AABBCCDDEEFFGG' " .
+    \ "'DELIMITER ;') as 'BODY' " .
     \ "from mysql.proc " .
     \ "where db='". database . "' and name='" . a:proc . "'"
 
@@ -2802,11 +2802,10 @@ function! s:DB_MYSQL_getStoredProcBody(proc)
     call s:DB_set('use_result_buffer', orig_use_result_buffer)
 
     " Remove decorations from result
-    let result = substitute(result, '+[+-]*\n','','g') 
-    let result = substitute(result, '| AABBCCDDEEFFGG *|', '','g')
-    let result = substitute(result, '| DELIMITER \$\$','DELIMITER $$','g') 
-    let result = substitute(result, 'DELIMITER ; |','DELIMITER ;','g') 
-    let result = substitute(result, '\r\n','\n','g') 
+    " Header row
+    let result = substitute(result, '+-*+\n| BODY *|\n+-*+\n| ','','') 
+    " Footer row
+    let result = substitute(result, '| \n+-*+\n$','','') 
 
     if result != ""
         return result
