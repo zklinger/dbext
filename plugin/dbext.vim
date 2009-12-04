@@ -1,11 +1,11 @@
 " dbext.vim - Commn Database Utility
 " Copyright (C) 2002-7, Peter Bagyinszki, David Fishburn
 " ---------------------------------------------------------------
-" Version:       11.01
+" Version:       11.00
 " Maintainer:    David Fishburn <dfishburn dot vim at gmail dot com>
 " Authors:       Peter Bagyinszki <petike1 at dpg dot hu>
 "                David Fishburn <dfishburn dot vim at gmail dot com>
-" Last Modified: 2009 Aug 27
+" Last Modified: 2009 Aug 16
 " Based On:      sqlplus.vim (author: Jamis Buck)
 " Created:       2002-05-24
 " Homepage:      http://vim.sourceforge.net/script.php?script_id=356
@@ -38,7 +38,7 @@ if v:version < 700
     echomsg "dbext: Version 4.00 or higher requires Vim7.  Version 3.50 can stil be used with Vim6."
     finish
 endif
-let g:loaded_dbext = 1101
+let g:loaded_dbext = 1100
 
 if !exists('g:dbext_default_menu_mode')
     let g:dbext_default_menu_mode = 3
@@ -75,6 +75,16 @@ command! -nargs=0 DBListVar         :call dbext#DB_sqlVarList()
 command! -nargs=1 -bang DBSetVar    :call dbext#DB_sqlVarAssignment(<bang>0, 'set '.<q-args>)
 command! -nargs=* -complete=customlist,dbext#DB_completeVariable DBSetVar :call dbext#DB_sqlVarAssignment(<bang>0, 'set '.<q-args>)
 
+if !exists(':DBGetStoredProcBody')
+    command! -nargs=0 DBGetStoredProcBody
+                \ :call dbext#DB_getStoredProcBody()
+    nmap <unique> <script> <Plug>DBGetStoredProcBody :DBGetStoredProcBody<CR>
+endif
+if !exists(':DBNewStoredProcBody')
+    command! -nargs=0 DBNewStoredProcBody
+                \ :call dbext#DB_newStoredProcBody()
+    nmap <unique> <script> <Plug>DBNewStoredProcBody :DBNewStoredProcBody<CR>
+endif
 if !exists(':DBExecVisualSQL')
     command! -nargs=0 -range DBExecVisualSQL :call dbext#DB_execSql(DB_getVisualBlock())
     xmap <unique> <script> <Plug>DBExecVisualSQL :DBExecVisualSQL<CR>
@@ -217,6 +227,16 @@ if !exists(':DBResultsToggleResize')
 end
 "}}}
 " Mappings {{{
+if !hasmapto('<Plug>DBGetStoredProcBody')  
+    if !hasmapto('<Leader>sp', 'n')
+        nmap <unique> <Leader>sp <Plug>DBGetStoredProcBody
+    endif
+endif
+if !hasmapto('<Plug>DBNewStoredProcBody')  
+    if !hasmapto('<Leader>spn', 'n')
+        nmap <unique> <Leader>spn <Plug>DBNewStoredProcBody
+    endif
+endif
 if !hasmapto('<Plug>DBExecVisualSQL') && !hasmapto('<Leader>se', 'v')
     xmap <unique> <Leader>se <Plug>DBExecVisualSQL
 endif
@@ -279,17 +299,17 @@ endif
 if !hasmapto('<Plug>DBDescribeTableAskName') && !hasmapto('<Leader>sdta', 'n')
     nmap <unique> <Leader>sdta <Plug>DBDescribeTableAskName
 endif
-if !hasmapto('<Plug>DBDescribeProcedure') && !hasmapto('<Leader>sdp')
-    if !hasmapto('<Leader>sdp', 'n')
-        nmap <unique> <Leader>sdp <Plug>DBDescribeProcedure
+if !hasmapto('<Plug>DBDescribeProcedure') && !hasmapto('<Leader>sdx')
+    if !hasmapto('<Leader>sdx', 'n')
+        nmap <unique> <Leader>sdx <Plug>DBDescribeProcedure
     endif
-    if !hasmapto('<Leader>sdp', 'v')
-        xmap <unique> <silent> <Leader>sdp
+    if !hasmapto('<Leader>sdx', 'v')
+        xmap <unique> <silent> <Leader>sdx
                     \ :<C-U>exec 'DBDescribeProcedure "'.DB_getVisualBlock().'"'<CR>
     endif
 endif
-if !hasmapto('<Plug>DBDescribeProcedureAskName') && !hasmapto('<Leader>sdpa', 'n')
-    nmap <unique> <Leader>sdpa <Plug>DBDescribeProcedureAskName
+if !hasmapto('<Plug>DBDescribeProcedureAskName') && !hasmapto('<Leader>sdxa', 'n')
+    nmap <unique> <Leader>sdxa <Plug>DBDescribeProcedureAskName
 endif
 if !hasmapto('<Plug>DBPromptForBufferParameters') && !hasmapto('<Leader>sbp', 'n')
     nmap <unique> <Leader>sbp <Plug>DBPromptForBufferParameters
@@ -382,11 +402,11 @@ if has("gui_running") && has("menu") && g:dbext_default_menu_mode != 0
     exec 'vnoremenu <script> '.menuRoot.'.Describe\ Table<TAB>'.leader.'sdt  :<C-U>exec ''DBDescribeTable "''.DB_getVisualBlock().''"''<CR>'
     exec 'noremenu  <script> '.menuRoot.'.Describe\ Table\ Ask<TAB>'.leader.'stda  :DBDescribeTableAskName<CR>'
     exec 'inoremenu <script> '.menuRoot.'.Describe\ Table\ Ask<TAB>'.leader.'stda  <C-O>:DBDescribeTableAskName<CR>'
-    exec 'noremenu  <script> '.menuRoot.'.Describe\ Procedure<TAB>'.leader.'sdp  :DBDescribeProcedure<CR>'
-    exec 'inoremenu <script> '.menuRoot.'.Describe\ Procedure<TAB>'.leader.'sdp  <C-O>:DBDescribeProcedure<CR>'
-    exec 'vnoremenu <script> '.menuRoot.'.Describe\ Procedure<TAB>'.leader.'sdp  :<C-U>exec ''DBDescribeProcedure "''.DB_getVisualBlock().''"''<CR>'
-    exec 'noremenu  <script> '.menuRoot.'.Describe\ Procedure\ Ask<TAB>'.leader.'sdpa  :DBDescribeProcedureAskName<CR>'
-    exec 'inoremenu <script> '.menuRoot.'.Describe\ Procedure\ Ask<TAB>'.leader.'sdpa  <C-O>:DBDescribeProcedureAskName<CR>'
+    exec 'noremenu  <script> '.menuRoot.'.Describe\ Procedure<TAB>'.leader.'sdx  :DBDescribeProcedure<CR>'
+    exec 'inoremenu <script> '.menuRoot.'.Describe\ Procedure<TAB>'.leader.'sdx  <C-O>:DBDescribeProcedure<CR>'
+    exec 'vnoremenu <script> '.menuRoot.'.Describe\ Procedure<TAB>'.leader.'sdx  :<C-U>exec ''DBDescribeProcedure "''.DB_getVisualBlock().''"''<CR>'
+    exec 'noremenu  <script> '.menuRoot.'.Describe\ Procedure\ Ask<TAB>'.leader.'sdxa  :DBDescribeProcedureAskName<CR>'
+    exec 'inoremenu <script> '.menuRoot.'.Describe\ Procedure\ Ask<TAB>'.leader.'sdxa  <C-O>:DBDescribeProcedureAskName<CR>'
     exec 'noremenu  <script> '.menuRoot.'.Prompt\ Connect\ Info<TAB>'.leader.'sbp  :DBPromptForBufferParameters<CR>'
     exec 'noremenu  <script> '.menuRoot.'.Column\ List<TAB>'.leader.'slc  :DBListColumn<CR>'
     exec 'inoremenu <script> '.menuRoot.'.Column\ List<TAB>'.leader.'slc  <C-O>:DBListColumn<CR>'
