@@ -1,11 +1,11 @@
 " dbext.vim - Commn Database Utility
 " Copyright (C) 2002-7, Peter Bagyinszki, David Fishburn
 " ---------------------------------------------------------------
-" Version:       11.00
+" Version:       11.01
 " Maintainer:    David Fishburn <dfishburn dot vim at gmail dot com>
 " Authors:       Peter Bagyinszki <petike1 at dpg dot hu>
 "                David Fishburn <dfishburn dot vim at gmail dot com>
-" Last Modified: 2009 Aug 16
+" Last Modified: 2009 Aug 27
 " Based On:      sqlplus.vim (author: Jamis Buck)
 " Created:       2002-05-24
 " Homepage:      http://vim.sourceforge.net/script.php?script_id=356
@@ -37,7 +37,7 @@ if v:version < 700
     echomsg "dbext: Version 4.00 or higher requires Vim7.  Version 3.50 can stil be used with Vim6."
     finish
 endif
-let g:loaded_dbext_auto = 1100
+let g:loaded_dbext_auto = 1101
 
 " call confirm("Loaded dbext autoload", "&Ok")
 " Script variable defaults, these are used internal and are never displayed
@@ -267,7 +267,7 @@ function! s:DB_buildLists()
     call add(s:all_params_mv, 'DB2_db2cmd_bin')
     call add(s:all_params_mv, 'DB2_db2cmd_cmd_options')
 
-    " Add 1 additional MySQL special cases
+    " Add 2 additional MySQL special cases
     call add(s:all_params_mv, 'MYSQL_version')
     call add(s:all_params_mv, 'MYSQL_definer')
 
@@ -3538,11 +3538,12 @@ function! s:DB_SQLSRV_execSql(str)
                 \ ' -P' . s:DB_get("passwd") 
     endif
 
-    "Use charcter pipe as column separator. It is hardcoded here because
+    "Use charcter pipe as column separator. 
+    " FIXME: It is hardcoded here because
     "if defined in .vimrc file as extra=-s "|" it ends up being parsed
     "as -s "|
     "Note the missing second double quote character that screws up things big
-    "time
+    "time. Could not figure out how to escape it to work.
     let cmd = cmd . 
                 \ s:DB_option(' -H ', s:DB_get("host"), ' ') .
                 \ s:DB_option(' -S ', s:DB_get("srvname"), ' ') .
@@ -6297,10 +6298,6 @@ function! s:DB_runCmd(cmd, sql, result)
         endif
 
         call s:DB_addToResultBuffer(result, "add")
-        " Determine rows affected
-        if l:db_type !~ '\<DBI\>\|\<ODBC\>'
-            call s:DB_{l:db_type}_stripHeaderFooter(result)
-        endif
 
         let dbi_result = 0
         if exists("g:dbext_dbi_result")
@@ -6337,6 +6334,10 @@ function! s:DB_runCmd(cmd, sql, result)
                 endif
             endif
             if s:DB_get('autoclose') == '1' && s:dbext_result_count <= s:DB_get('autoclose_min_lines')
+                " Determine rows affected
+                if l:db_type !~ '\<DBI\>\|\<ODBC\>'
+                    call s:DB_{l:db_type}_stripHeaderFooter(result)
+                endif
                 if s:dbext_result_count >= 2
                     if getline(2) !~ '^SQLCode:'
                         call dbext#DB_windowClose(s:DB_resBufName())
@@ -6751,8 +6752,16 @@ function! s:DB_addToResultBuffer(output, do_clear)
             let cmd = "perl db_print_results('".dbi_orient."')"
             exec cmd
         else
+            let g:dbext_rows_affected = 0
+            let l:start_of_output = line('$')
             silent! exec "put = a:output"
+            let l:end_of_output = line('$')
+            " Temporarily set this value as a rough estimate
+            " (with low cost) to be refined in DB_runCmd 
+            " if the autoclose kicks in.
+            let g:dbext_rows_affected = l:end_of_output - l:start_of_output
         endif
+
     endif
 
     " Since this is a small window, remove any blanks lines
@@ -6887,7 +6896,7 @@ function! s:DB_searchReplace(str, exp_find_str, exp_get_value, count_matches)
                     endif
                 endif
 
-                if use_save_vars == 1
+                if use_save_vars == 1 && has_key(b:dbext_sqlvar_mv, var)
                     let var_val = b:dbext_sqlvar_mv[var]
                 else
                     " Prompt the user using the name of the variable
