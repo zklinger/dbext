@@ -3556,8 +3556,101 @@ function! s:DB_SQLSRV_execSql(str)
     return result
 endfunction
 
+" Describe table used to just call sp_help <tablename> resulting in a messy
+" and hard to read output. The modified DB_SQLSRV_describeTable() function
+" creates a neatly formatted table output.
 function! s:DB_SQLSRV_describeTable(table_name)
-    return s:DB_SQLSRV_execSql("exec sp_help ".a:table_name)
+    let colsep = '|'
+    let query = "set nocount on " .
+    \ "declare @fieldlen   varchar(5) " .
+    \ "declare @typlen     varchar(5) " .
+    \ "declare @defaultlen varchar(5) " .
+    \ "declare @sql        nvarchar(4000) " .
+    \ " " .
+    \ "create table #tableinfo ( " .
+    \ "  field     nvarchar(131), " .
+    \ "  type      nvarchar(50), " .
+    \ "  nullable  varchar(4), " .
+    \ "  keytype   varchar(2), " .
+    \ "  defvalue  nvarchar(3500) " .
+    \ "  )  " .
+    \ " " .
+    \ "insert into #tableinfo " .
+    \ "select lower('" . colsep . " '+ c.column_name)  as 'field',  " .
+    \ "   case  " .
+    \ "     when character_maximum_length is null then ' ' + data_type " .
+    \ "     else ' ' + data_type  " .
+    \ "       + '(' + convert(varchar(20), character_maximum_length) + ')' " .
+    \ "   end as type, " .
+    \ "   upper(' '  + is_nullable) as nullable, " .
+    \ "   case tc.constraint_type " .
+    \ "   	when 'check'       then 'CK' " .
+    \ "   	when 'unique'      then 'UQ' " .
+    \ "   	when 'primary key' then 'PK' " .
+    \ "   	when 'foreign key' then 'FK' " .
+    \ "      else '' " .
+    \ "   end as keytype, " .
+    \ "   ' ' + isnull(c.column_default, '') as defvalue " .
+    \ " from information_schema.columns c " .
+    \ " left join information_schema.constraint_column_usage cu " .
+    \ "   on c.table_name       = cu.table_name " .
+    \ "  and c.column_name      = cu.column_name " .
+    \ " left join information_schema.table_constraints tc " .
+    \ "   on tc.table_name      = cu.table_name " .
+    \ "  and tc.constraint_name = cu.constraint_name " .
+    \ "where c.table_name       = '" . a:table_name . "' " .
+    \ " " .
+    \ "select @fieldlen   = max(len(field)) + 1 " .
+    \ "     , @typlen     = max(len(type)) + 1 " .
+    \ "     , @defaultlen = case " .
+    \ "                       when max(len(defvalue)) < 7 then 7 + 2 " .
+    \ "                       else max(len(defvalue)) + 1 " . 
+    \"                      end " .
+    \ "  from #tableinfo " .
+    \ " " .
+    \ "set @sql = N'select convert(char(' + @fieldlen + ') , + field) as ''" . colsep . " Field'', ' + " .
+    \ "  N' convert(char(' + @typlen + ') , type) as '' Type'', ' + " .
+    \ "  N' nullable as '' Null '', ' + " .
+    \ "  N' '' '' + keytype as '' Key '', ' + " .
+    \ "  N' convert(char(' + @defaultlen + ') , defvalue ) + ''" . colsep . "'' as '' Default'' ' + " .
+    \ "  N'from #tableinfo' " .
+    \ "exec sp_executesql @sql " .
+    \ " " .
+    \ "drop table #tableinfo " 
+
+    " Do not directly put the results in the result buffer
+    " We'll have to do a bit of tidying up first
+    let orig_use_result_buffer = s:DB_get('use_result_buffer')
+    call s:DB_set('use_result_buffer', 0)
+
+    " Run the query and capture the output
+    let result = s:DB_SQLSRV_execSql(query)
+
+    " Restore use_result_buffer setting
+    call s:DB_set('use_result_buffer', orig_use_result_buffer)
+
+    if result == ''
+      let result = "Table '" . a:table_name . "' does not exist"
+    else
+      " Draw a nice looking table around the result set
+      let srch = colsep . ' Field'
+      let repl = '\n' . colsep. ' Field'
+      let result = substitute(result, srch, repl, '')
+      let repl = colsep. '\n-'
+      let result = substitute(result, ' \n-', repl, '')
+      let result = substitute(result, '\n-', '\n+', '')
+      let result = substitute(result, '-\n', '+\n', '')
+      let srch = '-'.colsep.'-'
+      let result = substitute(result, srch, '-+-', 'g')
+      call s:DB_addToResultBuffer(result, "clear")
+      let rowsep =  getbufline(bufnr(s:DB_resBufName()), 3, 3)[0]
+      let result = rowsep . result . rowsep
+    endif
+
+    " Add the formatted result into the result buffer
+    call s:DB_addToResultBuffer(result, "clear")
+
+    return 0
 endfunction
 
 function! s:DB_SQLSRV_describeProcedure(procedure_name)
