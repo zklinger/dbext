@@ -271,6 +271,9 @@ function! s:DB_buildLists()
     call add(s:all_params_mv, 'MYSQL_version')
     call add(s:all_params_mv, 'MYSQL_definer')
 
+    " Add 1 additional SQLServer special case
+    call add(s:all_params_mv, 'SQLSRV_column_delimiter')
+
 
     " Any predefined global connection profiles in the users vimrc
     let s:conn_profiles_mv    = []
@@ -982,6 +985,7 @@ function! s:DB_getDefault(name)
     elseif a:name ==# "SQLSRV_cmd_terminator"   |return (exists("g:dbext_default_SQLSRV_cmd_terminator")?g:dbext_default_SQLSRV_cmd_terminator.'':"\ngo\n")
     elseif a:name ==# "SQLSRV_SQL_Top_pat"      |return (exists("g:dbext_default_SQLSRV_SQL_Top_pat")?g:dbext_default_SQLSRV_SQL_Top_pat.'':'\(\cselect\)')
     elseif a:name ==# "SQLSRV_SQL_Top_sub"      |return (exists("g:dbext_default_SQLSRV_SQL_Top_sub")?g:dbext_default_SQLSRV_SQL_Top_sub.'':'\1 TOP @dbext_topX ')
+    elseif a:name ==# "SQLSRV_column_delimiter" |return (exists("g:dbext_default_SQLSRV_column_delimiter")?g:dbext_default_SQLSRV_column_delimiter.'':'|')
     elseif a:name ==# "prompt_profile"          |return (exists("g:dbext_default_prompt_profile")?g:dbext_default_prompt_profile.'':"" .
                 \ (has('gui_running')?("[Optional] Enter profile #:\n".s:prompt_profile_list):
                 \ (s:prompt_profile_list."\n[Optional] Enter profile #: "))
@@ -3538,18 +3542,12 @@ function! s:DB_SQLSRV_execSql(str)
                 \ ' -P' . s:DB_get("passwd") 
     endif
 
-    "Use charcter pipe as column separator. 
-    " FIXME: It is hardcoded here because
-    "if defined in .vimrc file as extra=-s "|" it ends up being parsed
-    "as -s "|
-    "Note the missing second double quote character that screws up things big
-    "time. Could not figure out how to escape it to work.
     let cmd = cmd . 
                 \ s:DB_option(' -H ', s:DB_get("host"), ' ') .
                 \ s:DB_option(' -S ', s:DB_get("srvname"), ' ') .
                 \ s:DB_option(' -d ', s:DB_get("dbname"), ' ') .
                 \ s:DB_option(' ', s:DB_get("extra"), '') .
-                \ ' -s "|" ' . 
+                \ ' -s "' . s:DB_get('SQLSRV_column_delimiter') . '" ' . 
                 \ ' -i ' . s:dbext_tempfile
     let result = s:DB_runCmd(cmd, output, "")
 
@@ -3560,7 +3558,7 @@ endfunction
 " and hard to read output. The modified DB_SQLSRV_describeTable() function
 " creates a neatly formatted table output.
 function! s:DB_SQLSRV_describeTable(table_name)
-    let colsep = '|'
+    let colsep  = s:DB_get('SQLSRV_column_delimiter')
     let query = "set nocount on " .
     \ "declare @fieldlen   varchar(5) " .
     \ "declare @typlen     varchar(5) " .
