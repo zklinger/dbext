@@ -1,0 +1,40 @@
+
+" dbext.vim parameters
+let g:dbext_default_prompt_for_parameters=0
+let g:dbext_default_MYSQL_definer = 'zoltan@localhost'
+let g:dbext_default_stored_proc_author = 'Zoltan Klinger'
+let g:dbext_default_SQLSRV_column_delimiter = '|'
+
+
+" dbext.vim callback function 
+function! DBextPostResult(db_type, buf_nr)
+    " ==========================================================
+    " If dealing with a SQL Server SQL query,
+    " nicely format the query results. 
+    "
+    " Note: It uses Align.vim plugin to do the formatting
+    " ==========================================================
+
+    if a:db_type == 'SQLSRV'
+      " Draw missing left and right hand side borders
+      2, $-1 normal I|
+      2, $-1 normal A|
+      1, $ s/^ *|/|/g
+      " Align each column with to the widest entry in that column
+      3s/-/ /g
+      AlignCtrl p0P0
+      2, $-1 Align |
+
+      " Add missing top and bottom horizontal divider lines
+      3s/ /-/g
+      3s/|-/+-/g
+      3s/-|/-+/
+      3y
+      1 normal p
+      $ normal P
+      normal gg
+    endif
+
+endfunction
+
+
