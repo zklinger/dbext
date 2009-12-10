@@ -3689,7 +3689,8 @@ endfunction
 
 function! s:DB_SQLSRV_getListTable(table_prefix)
     return s:DB_SQLSRV_execSql(
-                \ "select convert(varchar,o.name), convert(varchar,u.name) ".
+                \ "select lower(convert(varchar(128),o.name)) as [Table], " . 
+                \ "       lower(convert(varchar(128),u.name)) as Owner".
                 \ "  from sysobjects o, sysusers u ".
                 \ " where o.uid=u.uid ".
                 \ "   and o.xtype='U' ".
@@ -3700,7 +3701,8 @@ endfunction
 
 function! s:DB_SQLSRV_getListProcedure(proc_prefix)
     return s:DB_SQLSRV_execSql(
-                \ "select convert(varchar,o.name), convert(varchar,u.name) ".
+                \ "select lower(convert(varchar(128),o.name)) as [Procedure], " .
+                \ "       lower(convert(varchar(128),u.name)) as Owner ".
                 \ "  from sysobjects o, sysusers u ".
                 \ " where o.uid=u.uid ".
                 \ "   and o.xtype='P' ".
@@ -3711,7 +3713,8 @@ endfunction
 
 function! s:DB_SQLSRV_getListView(view_prefix)
     return s:DB_SQLSRV_execSql(
-                \ "select convert(varchar,o.name), convert(varchar,u.name) ".
+                \ "select lower(convert(varchar(128),o.name)) as [View], " .
+                \ "       lower(convert(varchar(128),u.name)) as Owner ".
                 \ "  from sysobjects o, sysusers u ".
                 \ " where o.uid=u.uid ".
                 \ "   and o.xtype='V' ".
