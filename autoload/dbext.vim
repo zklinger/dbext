@@ -41,6 +41,7 @@ if v:version < 700
 endif
 let g:loaded_dbext_auto = 1200
 
+
 " call confirm("Loaded dbext autoload", "&Ok")
 " Script variable defaults, these are used internal and are never displayed
 " to the end user via the DBGetOption command  {{{
@@ -5340,10 +5341,10 @@ function! dbext#DB_getSqlWithDefault(...)
         if a:2 !~ '["\[\]]' && a:2 =~ '\w\s\+\w'
             let sql = sql . '"' . a:2 . '"'
         else
-            let sql = sql . a:2
+            let sql = sql . s:DB_applyTableNameConvention(a:2)
         endif
     else
-        let sql = sql . expand("<cword>")
+        let sql = sql . s:DB_applyTableNameConvention(expand("<cword>"))
     endif
     
     return sql
@@ -5390,6 +5391,53 @@ function! dbext#DB_execSql(query)
     return -1
 endfunction
 
+
+function! s:sub(str,pat,rep)
+  return substitute(a:str,'\v\C'.a:pat,a:rep,'')
+endfunction
+
+function! s:singularize(word)
+    " Probably not worth it to be not comprehensive but we can
+    " still hit the common cases.
+    let word = a:word
+    if word =~? '\.js$' || word == ''
+      return word
+    endif
+    let word = s:sub(word,'eople$','ersons')
+    let word = s:sub(word,'[aeio]@<!ies$','ys')
+    let word = s:sub(word,'xe[ns]$','xs')
+    let word = s:sub(word,'ves$','fs')
+    let word = s:sub(word,'ss%(es)=$','sss')
+    let word = s:sub(word,'s$','')
+    let word = s:sub(word,'%([nrt]ch|tatus|lias)\zse$','')
+    let word = s:sub(word,'%(nd|rt)\zsice$','ex')
+    return word
+endfunction
+
+function! s:pluralize(word)
+    let word = s:singularize(a:word)
+    if word == ''
+      return word
+    endif
+    let word = s:sub(word,'[aeio]@<!y$','ie')
+    let word = s:sub(word,'%(nd|rt)@<=ex$','ice')
+    let word = s:sub(word,'%([osxz]|[cs]h)$','&e')
+    let word = s:sub(word,'f@<!f$','ve')
+    let word .= 's'
+    let word = s:sub(word,'ersons$','eople')
+    return word
+endfunction
+
+function! s:DB_applyTableNameConvention(word)
+    if g:dbext_table_names_convention == 1
+            return s:singularize(a:word)
+    elseif g:dbext_table_names_convention == 2
+            return s:pluralize(a:word)
+    endif
+    return a:word
+endfunction
+    
+
 function! dbext#DB_execSqlWithDefault(...)
     if (a:0 > 0)
         let sql = a:1
@@ -5401,10 +5449,10 @@ function! dbext#DB_execSqlWithDefault(...)
         if a:2 !~ '["\[\]]' && a:2 =~ '\w\s\+\w'
             let sql = sql . '"' . a:2 . '"'
         else
-            let sql = sql . a:2
+            let sql = sql . s:DB_applyTableNameConvention(a:2)
         endif
     else
-        let sql = sql . expand("<cword>")
+        let sql = sql . s:DB_applyTableNameConvention(expand("<cword>"))
     endif
     
     return dbext#DB_execSql(sql)
@@ -5554,6 +5602,7 @@ function! dbext#DB_describeTable(...)
         call s:DB_warningMsg( 'dbext:You must supply a table name' )
         return ""
     endif
+    let table_name = s:DB_applyTableNameConvention(table_name)
 
     return dbext#DB_execFuncTypeWCheck('describeTable', table_name)
 endfunction

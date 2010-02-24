@@ -49,6 +49,10 @@ if !exists('g:dbext_rows_affected')
     let g:dbext_rows_affected = 0
 endif
 
+if !exists('g:dbext_table_names_convention')
+    let g:dbext_table_names_convention = 2
+endif
+
 " Commands {{{
 command! -nargs=+ DBExecSQL         :call dbext#DB_execSql(<q-args>)
 command! -nargs=+ DBExecSQLTopX     :call dbext#DB_execSqlTopX(<q-args>)
