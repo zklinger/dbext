@@ -1,13 +1,14 @@
-*dbext.txt*	For Vim version 7.0.  Last change: 2009 Aug 27
+*dbext.txt*	For Vim version 7.0.  Last change: 2010 Mar 3
+
 
 
                 	  VIM REFERENCE MANUAL 
                                 by 
                      David Fishburn <dfishburn dot vim at gmail dot com>
-                     Peter Bagyinszki <petike1 at dpg dot hu>
+                     Peter Bagyinszki <petike1 at gmail dot com>
 
 	  	Database extension plugin (dbext.vim) manual
-	  	dbext.vim version 11.01
+	  	dbext.vim version 12.00
 
 For instructions on installing this file, type
 	:help add-local-help
@@ -57,14 +58,15 @@ Homepage: http://vim.sourceforge.net/script.php?script_id=356
     17.3  Executing commands                  |dbext-tutorial-execute|
     17.4  Selecting from tables               |dbext-tutorial-select|
     17.5  Describing objects                  |dbext-tutorial-describe|
-    17.6  Connection Profiles                 |dbext-tutorial-profile|
-    17.7  Login Script                        |dbext-tutorial-login|
-    17.8  Listing object                      |dbext-tutorial-objects|
-    17.9  Object Completion                   |dbext-tutorial-completion|
-    17.10 Host variable replacement           |dbext-tutorial-variables|
-    17.11 Filetype support                    |dbext-tutorial-filetype|
-    17.12 History                             |dbext-tutorial-history|
-    17.13 DBI Tutorial                        |dbext-tutorial-dbi|
+    17.6  Working with stored procedures      |dbext-tutorial-storedproc|
+    17.7  Connection Profiles                 |dbext-tutorial-profile|
+    17.8  Login Script                        |dbext-tutorial-login|
+    17.9  Listing object                      |dbext-tutorial-objects|
+    17.10 Object Completion                   |dbext-tutorial-completion|
+    17.11 Host variable replacement           |dbext-tutorial-variables|
+    17.12 Filetype support                    |dbext-tutorial-filetype|
+    17.13 History                             |dbext-tutorial-history|
+    17.14 DBI Tutorial                        |dbext-tutorial-dbi|
 
 {Vi does not have any of this}
 
@@ -91,6 +93,21 @@ David Fishburn
 
 ==============================================================================
 2. What's New						*dbext-new*
+
+Version 12.00
+
+ Bug Fixes
+ ---------
+ - Table, view and stored procedure names longer than 30 characters in length
+   got truncated when callling DBListTable, DBListView and DBListProcedure in
+   SQLServer database.
+
+New Features
+ ------------
+ - Support for displaying the SQL code of an existing stored procedure.
+ - Support for creating a new stored procedure from a database scpecific 
+   template.
+
 
 Version 11.01
 
@@ -1219,9 +1236,15 @@ Version 2.00
         prompted, the value will be stored for later use.  To turn
         this feature off, add the following to your .vimrc: >
             let g:dbext_default_variable_remember = '0'
+    dbext_default_stored_proc_author
+<       Default: ''
+        When creating a new stored procedure from a template, this 
+        configuration value is used to display the name of the author
+        in the stored procedure's comment section. To customize it,
+        add the following to your .vimrc:>
+            let g:dbext_default_stored_proc_author = 'Joe Bloggs'
 
 
-<
  Buffer variables
     You can check all options for the buffer without specifying an option name
     this will open the Result buffer and list all settings: >
@@ -1799,6 +1822,8 @@ Version 2.00
     DB_NEW_getListTable
     DB_NEW_getListView
     DB_NEW_stripHeaderFooter
+    DB_NEW_getStoredProcBody
+    DB_NEW_getStoredProcTemplate
 <
  Assuming the unique name for your extension was 'NEW'.  To begin with a 
  new database, copy all the DB_ASA_* functions and modify them to suite
@@ -2678,8 +2703,36 @@ To specify the type of database you connect to most often, you can place the
         Plugin->dbext->Describe Procedure
 
 
+ 17.6 Working with stored procedures             *dbext-tutorial-storedproc*
+ -----------------------------------
+ You can view the SQL code of a stored procedure:
+    a) Command:
+        :DBGetStoredProcBody 
+    b) Mapping:
+        \spb  s(sql) p (procedure) b(body)
+    c) Menu (if available):
+        Plugin->dbext->Procedure Body
 
- 17.6 Connection Profiles                        *dbext-tutorial-profile*
+ You can use a template for creating a new store procedure:
+    a) Command:
+        :DBGetStoredProcTemplate
+    b) Mapping:
+        \spt  s(sql) p (procedure) t(template)
+    c) Menu (if available):
+        Plugin->dbext->Procedure Template
+
+    A database specific stored procedure template containing the new
+    procedure name, author, created date and time will be placed in 
+    the Vim paste buffer. Move to the location where you want the template
+    placed and hit p (paste).
+  
+ Database specific notes:
+   MySQL:
+      To preserve comment lines when creating your stored procedure add
+      'extra=--comments' option to your connection string
+
+
+ 17.7 Connection Profiles                        *dbext-tutorial-profile*
  ------------------------
  The most efficient way to setup connection information is to create
  connection profiles in your |.vimrc|.  If you work with multiple databases,
@@ -2712,7 +2765,7 @@ To specify the type of database you connect to most often, you can place the
  |dbext-connect-profiles-examples|.
 
 
- 17.7 Login Script                            	 *dbext-tutorial-login*
+ 17.8 Login Script                            	 *dbext-tutorial-login*
  -----------------
  For each profile, you can also specify a file of SQL commands to be 
  executed each time a connection is made to the database.  This can be
@@ -2734,7 +2787,7 @@ To specify the type of database you connect to most often, you can place the
 
 
 
- 17.8 Listing object                            *dbext-tutorial-objects*
+ 17.9 Listing object                            *dbext-tutorial-objects*
  -------------------
  Often, you do not know the name of your table, but just need to browse
  through the database.  dbext can be used to display listings of objects, and
@@ -2782,7 +2835,7 @@ To specify the type of database you connect to most often, you can place the
 < 
 
 
- 17.9 Object Completion                         *dbext-tutorial-completion*
+ 17.10 Object Completion                        *dbext-tutorial-completion*
  ----------------------
  You can usually remember the letter the object (table, procedure, view)
  begins with, but you cannot remember how to quite spell the name (either that
@@ -2821,7 +2874,7 @@ To specify the type of database you connect to most often, you can place the
  
 
 
- 17.10 Host variable replacement                *dbext-tutorial-variables*
+ 17.11 Host variable replacement                *dbext-tutorial-variables*
  -------------------------------
  When writing SQL statements, you can often pass in parameters or host
  variables to be replaced at execution time.  When executing these SQL 
@@ -2987,7 +3040,7 @@ To specify the type of database you connect to most often, you can place the
 <
         
 
- 17.11 Filetype support                         *dbext-tutorial-filetype*
+ 17.12 Filetype support                         *dbext-tutorial-filetype*
  ----------------------
  This is an extension of the above host variable replacement.  The following
  filetypes are currently supported:  >
@@ -3039,7 +3092,7 @@ To specify the type of database you connect to most often, you can place the
 
 
 
- 17.12 History                            	*dbext-tutorial-history*
+ 17.13 History                            	*dbext-tutorial-history*
  -------------
  History is a new feature of dbext 3.0.  Previous statements are 
  automatically recorded into a history file.  To view these statements
@@ -3048,7 +3101,7 @@ To specify the type of database you connect to most often, you can place the
  To remove an item from the history you can use 'dd'.
 
 
- 17.13 DBI Tutorial                            	*dbext-tutorial-dbi*
+ 17.14 DBI Tutorial                            	*dbext-tutorial-dbi*
  ------------------
 
  Assuming you have already followed the main tutorial, the DBI interface

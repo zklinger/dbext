@@ -1,11 +1,11 @@
 " dbext.vim - Commn Database Utility
 " Copyright (C) 2002-7, Peter Bagyinszki, David Fishburn
 " ---------------------------------------------------------------
-" Version:       11.01
+" Version:       12.00
 " Maintainer:    David Fishburn <dfishburn dot vim at gmail dot com>
-" Authors:       Peter Bagyinszki <petike1 at dpg dot hu>
+" Authors:       Peter Bagyinszki <petike1 at gmail dot com>
 "                David Fishburn <dfishburn dot vim at gmail dot com>
-" Last Modified: 2009 Aug 27
+" Last Modified: 2010 Mar 3
 " Based On:      sqlplus.vim (author: Jamis Buck)
 " Created:       2002-05-24
 " Homepage:      http://vim.sourceforge.net/script.php?script_id=356
@@ -13,6 +13,7 @@
 "                Hari Krishna Dara <hari_vim at yahoo dot com>
 "                Ron Aaron
 "                Andi Stern
+"                Zoltan Klinger <zoltan dot klinger at gmail dot com>
 "
 " Help:         :h dbext.txt 
 "
@@ -37,7 +38,7 @@ if v:version < 700
     echomsg "dbext: Version 4.00 or higher requires Vim7.  Version 3.50 can stil be used with Vim6."
     finish
 endif
-let g:loaded_dbext_auto = 1101
+let g:loaded_dbext_auto = 1200
 
 " call confirm("Loaded dbext autoload", "&Ok")
 " Script variable defaults, these are used internal and are never displayed
@@ -189,6 +190,7 @@ function! s:DB_buildLists()
     call add(s:script_params_mv, 'window_width')
     call add(s:script_params_mv, 'window_increment')
     call add(s:script_params_mv, 'login_script_dir')
+    call add(s:script_params_mv, 'stored_proc_author')
 
     " DB server specific params
     " See below for 3 additional DB2 items
@@ -266,8 +268,12 @@ function! s:DB_buildLists()
     call add(s:all_params_mv, 'DB2_db2cmd_bin')
     call add(s:all_params_mv, 'DB2_db2cmd_cmd_options')
 
-    " Add 1 additional MySQL special cases
+    " Add 2 additional MySQL special cases
     call add(s:all_params_mv, 'MYSQL_version')
+    call add(s:all_params_mv, 'MYSQL_definer')
+
+    " Add 1 additional SQLServer special case
+    call add(s:all_params_mv, 'SQLSRV_column_delimiter')
 
 
     " Any predefined global connection profiles in the users vimrc
@@ -786,6 +792,7 @@ function! s:DB_getDefault(name)
     elseif a:name ==# "driver"                  |return (exists("g:dbext_default_driver")?g:dbext_default_driver.'':'') 
     elseif a:name ==# "driver_parms"            |return (exists("g:dbext_default_driver_parms")?g:dbext_default_driver_parms.'':'') 
     elseif a:name ==# "conn_parms"              |return (exists("g:dbext_default_conn_parms")?g:dbext_default_conn_parms.'':'') 
+    elseif a:name ==# "stored_proc_author"      |return (exists("g:dbext_default_stored_proc_author")?g:dbext_default_stored_proc_author.'':'<your name>')
     " ? - look for a question mark
     " w - MUST have word characters after it
     " W - CANNOT have any word characters after it
@@ -857,6 +864,7 @@ function! s:DB_getDefault(name)
     elseif a:name ==# "MYSQL_cmd_options"       |return (exists("g:dbext_default_MYSQL_cmd_options")?g:dbext_default_MYSQL_cmd_options.'':'')
     elseif a:name ==# "MYSQL_cmd_terminator"    |return (exists("g:dbext_default_MYSQL_cmd_terminator")?g:dbext_default_MYSQL_cmd_terminator.'':';')
     elseif a:name ==# "MYSQL_version"           |return (exists("g:dbext_default_MYSQL_version")?g:dbext_default_MYSQL_version.'':'5')
+    elseif a:name ==# "MYSQL_definer"           |return (exists("g:dbext_default_MYSQL_definer")?g:dbext_default_MYSQL_definer.'':'root@localhost')
     elseif a:name ==# "MYSQL_SQL_Top_pat"       |return (exists("g:dbext_default_MYSQL_SQL_Top_pat")?g:dbext_default_MYSQL_SQL_Top_pat.'':'\(.*\)')
     elseif a:name ==# "MYSQL_SQL_Top_sub"       |return (exists("g:dbext_default_MYSQL_SQL_Top_sub")?g:dbext_default_MYSQL_SQL_Top_sub.'':'\1 LIMIT @dbext_topX ')
     elseif a:name ==# "FIREBIRD_bin"            |return (exists("g:dbext_default_FIREBIRD_bin")?g:dbext_default_FIREBIRD_bin.'':'isql')
@@ -900,6 +908,7 @@ function! s:DB_getDefault(name)
     elseif a:name ==# "SQLSRV_cmd_terminator"   |return (exists("g:dbext_default_SQLSRV_cmd_terminator")?g:dbext_default_SQLSRV_cmd_terminator.'':"\ngo\n")
     elseif a:name ==# "SQLSRV_SQL_Top_pat"      |return (exists("g:dbext_default_SQLSRV_SQL_Top_pat")?g:dbext_default_SQLSRV_SQL_Top_pat.'':'\(\cselect\)')
     elseif a:name ==# "SQLSRV_SQL_Top_sub"      |return (exists("g:dbext_default_SQLSRV_SQL_Top_sub")?g:dbext_default_SQLSRV_SQL_Top_sub.'':'\1 TOP @dbext_topX ')
+    elseif a:name ==# "SQLSRV_column_delimiter" |return (exists("g:dbext_default_SQLSRV_column_delimiter")?g:dbext_default_SQLSRV_column_delimiter.'':'|')
     elseif a:name ==# "prompt_profile"          |return (exists("g:dbext_default_prompt_profile")?g:dbext_default_prompt_profile.'':"" .
                 \ (has('gui_running')?("[Optional] Enter profile #:\n".s:prompt_profile_list):
                 \ (s:prompt_profile_list."\n[Optional] Enter profile #: "))
@@ -1573,6 +1582,78 @@ function! s:DB_fullPath2Bin(executable_name)
     endif
     return full_bin
 endfunction 
+
+function! dbext#DB_getStoredProcBody(...)
+    if a:0 == 0
+      " Get name of stored procedure from the user
+      let query = inputdialog("Enter stored procedure name:", '')
+      if strlen(query) == 0
+          return -1
+      endif
+    else
+      let query = a:1
+    endif
+    
+    " We need some additional database type information to continue
+    if s:DB_get("buffer_defaulted") != 1
+        let use_defaults = 1
+        let rc = s:DB_resetBufferParameters(use_defaults)
+        if rc == -1
+            call s:DB_warningMsg( 
+                        \ "dbext:A valid database type must ".
+                        \ "be chosen" 
+                        \ )
+            return rc
+        endif
+    endif
+    
+    " Run the query
+    let result =  dbext#DB_execFuncTypeWCheck('getStoredProcBody', query)
+    " Display result message
+    if result == '-1'
+        call s:DB_warningMsg("Stored procedure '" . query . "' not found.")
+    else
+        " Paste result in the paste register
+        if &clipboard == 'unnamed'
+            let @* = result 
+        else
+            let @@ = result 
+        endif
+        echo "Stored proc body for '". query . "' in paste register."
+    endif
+
+endfunction
+
+function! dbext#DB_getStoredProcTemplate()
+    " Get name of stored procedure name from the user
+    let proc = inputdialog("Enter new stored procedure name:", '')
+    if strlen(proc) == 0
+        return -1
+    endif
+    
+    " We need some additional database type information to continue
+    if s:DB_get("buffer_defaulted") != 1
+        let use_defaults = 1
+        let rc = s:DB_resetBufferParameters(use_defaults)
+        if rc == -1
+            call s:DB_warningMsg( 
+                        \ "dbext:A valid database type must ".
+                        \ "be chosen" 
+                        \ )
+            return rc
+        endif
+    endif
+    
+    " Get the stored proc template
+    let result =  dbext#DB_execFuncTypeWCheck('getStoredProcTemplate', proc)
+    " Paste result in the paste register
+    if &clipboard == 'unnamed'
+        let @* = result 
+    else
+        let @@ = result 
+    endif
+    echo "Stored proc template for '". proc . "' in paste register."
+endfunction
 "}}}
 
 " ASA exec {{{
@@ -1817,6 +1898,16 @@ function! s:DB_ASA_getDictionaryView()
                 \ )
     return s:DB_ASA_stripHeaderFooter(result)
 endfunction 
+
+function! s:DB_ASA_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_ASA_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
 "}}}
 " UltraLite exec {{{
 function! s:DB_ULTRALITE_execSql(str)
@@ -1939,6 +2030,16 @@ endfunction
 
 function! s:DB_ULTRALITE_getDictionaryView() 
     echo 'UltraLite does not support views'
+    return -1
+endfunction 
+
+function! s:DB_ULTRALITE_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_ULTRALITE_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
     return -1
 endfunction 
 "}}}
@@ -2102,6 +2203,17 @@ function! s:DB_ASE_getDictionaryView() "{{{
                 \ )
     return s:DB_ASE_stripHeaderFooter(result)
 endfunction "}}}
+
+function! s:DB_ASE_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_ASE_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
 "}}}
 " DB2 exec {{{
 function! s:DB_DB2_execSql(str)
@@ -2369,6 +2481,16 @@ function! s:DB_DB2_getDictionaryView()
                 \ )
     return s:DB_DB2_stripHeaderFooter(result)
 endfunction 
+
+function! s:DB_DB2_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_DB2_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
 "}}}
 " INGRES exec {{{
 function! s:DB_INGRES_execSql(str)
@@ -2448,6 +2570,16 @@ function! s:DB_INGRES_getDictionaryProcedure()
 endfunction 
 
 function! s:DB_INGRES_getDictionaryView() 
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_INGRES_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_INGRES_getStoredProcTemplate(proc)
     echo 'Feature not yet available'
     return -1
 endfunction 
@@ -2532,6 +2664,16 @@ function! s:DB_INTERBASE_getDictionaryProcedure()
 endfunction 
 
 function! s:DB_INTERBASE_getDictionaryView() 
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_INTERBASE_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_INTERBASE_getStoredProcTemplate(proc)
     echo 'Feature not yet available'
     return -1
 endfunction 
@@ -2690,6 +2832,83 @@ function! s:DB_MYSQL_getDictionaryView() "{{{
     let result = s:DB_MYSQL_execSql(query)
     return s:DB_MYSQL_stripHeaderFooter(result)
 endfunction "}}}
+
+function! s:DB_MYSQL_getStoredProcBody(proc)
+    if dbext#DB_getWType('version') < '5'
+        call s:DB_warningMsg( 'dbext:MySQL does not support procedures' )
+        return '-1'
+    endif
+
+    " Set query
+    let database = s:DB_get("dbname")
+    let query = "select  concat('DELIMITER $$\n\n', " .
+    \ "'DROP PROCEDURE IF EXISTS `', name, '` $$\n', " .
+    \ "'CREATE DEFINER=`', replace(definer, '@','`@`'), '` PROCEDURE `', name, '`(', " .
+    \ "cast(param_list as char), " .
+    \ "')\n', " .
+    \ "cast(body as char), ' $$\n\n', " .
+    \ "'DELIMITER ;') as 'BODY' " .
+    \ "from mysql.proc " .
+    \ "where db='". database . "' and name='" . a:proc . "'"
+
+    " Do not return the result in the result buffer
+    let orig_use_result_buffer = s:DB_get('use_result_buffer')
+    call s:DB_set('use_result_buffer', 0)
+
+    " Run the query
+    let result = s:DB_MYSQL_execSql(query)
+
+    " Restore use_result_buffer setting
+    call s:DB_set('use_result_buffer', orig_use_result_buffer)
+
+    " Remove decorations from result
+    " Header row
+    let result = substitute(result, '+-*+\n| BODY *|\n+-*+\n| ','','') 
+    " Footer row
+    let result = substitute(result, '| \n+-*+\n$','','') 
+
+    if result != ""
+        return result
+    else
+        return '-1'
+    endif
+endfunction
+
+function! s:DB_MYSQL_getStoredProcTemplate(proc)
+    if dbext#DB_getWType('version') < '5'
+        call s:DB_warningMsg( 'dbext:MySQL does not support procedures' )
+        return '-1'
+    endif
+
+    " Get defaults
+    let user = s:DB_get('stored_proc_author')
+    let definer = s:DB_get('MYSQL_definer')
+    let definer = '`' . substitute(definer, '@', '`@`', '') . '`'
+    
+    " Create stored procedure body
+    let result = "DELIMITER $$\n"   . 
+                 \ "\n"  . 
+                 \ "DROP PROCEDURE IF EXISTS `" .a:proc. "` $$\n" . 
+                 \ "CREATE DEFINER=" .definer. " PROCEDURE `" .a:proc. "`(\n" . 
+                 \ "  _varX INT\n" . 
+                 \ ")\n" . 
+                 \ "BEGIN\n" .
+                 \ "-- ========================================================================\n" .
+                 \ "-- Author     : " .user. "\n" . 
+                 \ "-- Created    : " . strftime("%Y %b %d %X") . "\n" .  
+                 \ "-- Procedure  : " .a:proc. "\n" . 
+                 \ "--\n" .
+                 \ "-- Description: \n" . 
+                 \ "--\n" .
+                 \ "-- ========================================================================\n" .
+                 \ "\n" . 
+                 \ "\n" . 
+                 \ "END $$\n" . 
+                 \ "\n" .  
+                 \ "DELIMITER ;\n"
+    return result
+endfunction
+
 "}}}
 " SQLITE exec {{{
 function! s:DB_SQLITE_execSql(str)
@@ -2828,6 +3047,16 @@ function! s:DB_SQLITE_getDictionaryProcedure()
 endfunction 
 
 function! s:DB_SQLITE_getDictionaryView()
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_SQLITE_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_SQLITE_getStoredProcTemplate(proc)
     echo 'Feature not yet available'
     return -1
 endfunction 
@@ -2983,6 +3212,16 @@ function! s:DB_ORA_getDictionaryView() "{{{
                 \ )
     return s:DB_ORA_stripHeaderFooter(result)
 endfunction "}}}
+
+function! s:DB_ORA_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_ORA_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
 "}}}
 " PGSQL exec {{{
 function! s:DB_PGSQL_execSql(str)
@@ -3142,6 +3381,16 @@ function! s:DB_PGSQL_getDictionaryView()
                 \ " order by ".(s:DB_get('dict_show_owner')==1?"viewowner, ":'')."viewname"
                 \ )
     return s:DB_PGSQL_stripHeaderFooter(result)
+endfunction 
+
+function! s:DB_PGSQL_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_PGSQL_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
 endfunction 
 "}}}
 " RDB exec {{{
@@ -3347,6 +3596,16 @@ function! s:DB_RDB_stripHeaderFooter(result) "{{{
     let stripped = substitute( stripped, '\(\<\w\+\>\)\s*\(\n\)', '\1\2', '' )
     return stripped
 endfunction "}}}
+
+function! s:DB_RDB_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_RDB_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
 "}}}
 " SQLSRV exec {{{
 function! s:DB_SQLSRV_execSql(str)
@@ -3383,6 +3642,7 @@ function! s:DB_SQLSRV_execSql(str)
                 \ s:DB_option(' -S ', s:DB_get("srvname"), ' ') .
                 \ s:DB_option(' -d ', s:DB_get("dbname"), ' ') .
                 \ s:DB_option(' ', s:DB_get("extra"), '') .
+                \ ' -s "' . s:DB_get('SQLSRV_column_delimiter') . '" ' . 
                 \ ' -i ' . s:dbext_tempfile
     let result = s:DB_runCmd(cmd, output, "")
 
@@ -3390,7 +3650,32 @@ function! s:DB_SQLSRV_execSql(str)
 endfunction
 
 function! s:DB_SQLSRV_describeTable(table_name)
-    return s:DB_SQLSRV_execSql("exec sp_help ".a:table_name)
+    " Describe the table much like the way MySql does it
+    let query = "set nocount on " .
+    \ "select  lower(c.column_name)  as [field],  " .
+    \ "   case  " .
+    \ "     when character_maximum_length is null then ' ' + data_type " .
+    \ "     else ' ' + data_type  " .
+    \ "       + '(' + convert(varchar(20), character_maximum_length) + ')' " .
+    \ "   end as [type], " .
+    \ "   upper(' '  + is_nullable) as [null], " .
+    \ "   case tc.constraint_type " .
+    \ "     when 'check'       then 'CK' " .
+    \ "     when 'unique'      then 'UQ' " .
+    \ "     when 'primary key' then 'PK' " .
+    \ "     when 'foreign key' then 'FK' " .
+    \ "      else '' " .
+    \ "   end as [key], " .
+    \ "   ' ' + isnull(c.column_default, '') as [default] " .
+    \ " from information_schema.columns c " .
+    \ " left join information_schema.constraint_column_usage cu " .
+    \ "   on c.table_name       = cu.table_name " .
+    \ "  and c.column_name      = cu.column_name " .
+    \ " left join information_schema.table_constraints tc " .
+    \ "   on tc.table_name      = cu.table_name " .
+    \ "  and tc.constraint_name = cu.constraint_name " .
+    \ "where c.table_name       = '" . a:table_name . "' " 
+    return s:DB_SQLSRV_execSql(query)
 endfunction
 
 function! s:DB_SQLSRV_describeProcedure(procedure_name)
@@ -3430,8 +3715,10 @@ function! s:DB_SQLSRV_getListColumn(table_name)
 endfunction 
 
 function! s:DB_SQLSRV_getListTable(table_prefix)
+    " Table names longer than 30 characters got truncated before
     return s:DB_SQLSRV_execSql(
-                \ "select convert(varchar,o.name), convert(varchar,u.name) ".
+                \ "select lower(convert(varchar(128),o.name)) as [Table], " . 
+                \ "       lower(convert(varchar(128),u.name)) as Owner".
                 \ "  from sysobjects o, sysusers u ".
                 \ " where o.uid=u.uid ".
                 \ "   and o.xtype='U' ".
@@ -3441,8 +3728,10 @@ function! s:DB_SQLSRV_getListTable(table_prefix)
 endfunction
 
 function! s:DB_SQLSRV_getListProcedure(proc_prefix)
+    " Procedure names longer than 30 characters got truncated before
     return s:DB_SQLSRV_execSql(
-                \ "select convert(varchar,o.name), convert(varchar,u.name) ".
+                \ "select lower(convert(varchar(128),o.name)) as [Procedure], " .
+                \ "       lower(convert(varchar(128),u.name)) as Owner ".
                 \ "  from sysobjects o, sysusers u ".
                 \ " where o.uid=u.uid ".
                 \ "   and o.xtype='P' ".
@@ -3452,8 +3741,10 @@ function! s:DB_SQLSRV_getListProcedure(proc_prefix)
 endfunction
 
 function! s:DB_SQLSRV_getListView(view_prefix)
+    " View names longer than 30 characters got truncated before
     return s:DB_SQLSRV_execSql(
-                \ "select convert(varchar,o.name), convert(varchar,u.name) ".
+                \ "select lower(convert(varchar(128),o.name)) as [View], " .
+                \ "       lower(convert(varchar(128),u.name)) as Owner ".
                 \ "  from sysobjects o, sysusers u ".
                 \ " where o.uid=u.uid ".
                 \ "   and o.xtype='V' ".
@@ -3494,6 +3785,85 @@ function! s:DB_SQLSRV_getDictionaryView() "{{{
                 \ )
     return s:DB_SQLSRV_stripHeaderFooter(result)
 endfunction "}}}
+
+function! s:DB_SQLSRV_getStoredProcBody(proc)
+    " Set query
+    let query = "set nocount on " .
+             \ "select text as ' ' " .
+             \ "from sysobjects so " .
+             \ "inner join syscomments sc " .
+             \ "on so.id = sc.id " .
+             \ "where name = '" . a:proc . "' " .
+             \ "and xtype = 'P' " 
+    
+    " Do not return the result in the result buffer
+    let orig_use_result_buffer = s:DB_get('use_result_buffer')
+    call s:DB_set('use_result_buffer', 0)
+
+    " Run the query
+    let result = s:DB_SQLSRV_execSql(query)
+
+    " Restore use_result_buffer setting
+    call s:DB_set('use_result_buffer', orig_use_result_buffer)
+
+    " Remove decorations from result
+    let result = substitute(result, ' *\n-*\n', '', '')
+    let result = substitute(result, ' *\n *\n$', '', '')
+
+    " Does the stored procedure exits?
+    if result == "\n"
+        return '-1'
+    endif
+
+    " Convert string pattern 'CREATE PROCEDURE' to 'ALTER PROCEDURE'
+    let result = substitute(result, ' *\cCREATE *\cPROCEDURE','ALTER PROCEDURE','') 
+
+    " Format the stored proc body
+    let result = "SET QUOTED_IDENTIFIER OFF \n" . 
+                 \ "GO\n" . 
+                 \ "SET ANSI_NULLS OFF \n" . 
+                 \ "GO\n" . 
+                 \ result .
+                 \ "GO\n" . 
+                 \ "SET QUOTED_IDENTIFIER OFF\n" . 
+                 \ "GO\n" . 
+                 \ "SET ANSI_NULLS ON \n" . 
+                 \ "GO\n" 
+    return result
+endfunction 
+
+function! s:DB_SQLSRV_getStoredProcTemplate(proc)
+    " Get defaults
+    let user = s:DB_get('stored_proc_author')
+
+    " Create stored procedure body
+    let result = "SET QUOTED_IDENTIFIER OFF \n" . 
+                 \ "GO\n" . 
+                 \ "SET ANSI_NULLS OFF \n" . 
+                 \ "GO\n" . 
+                 \ "-- ========================================================================\n" .
+                 \ "-- Author     : " .user. "\n" . 
+                 \ "-- Created    : " . strftime("%Y %b %d %X") . "\n" .  
+                 \ "-- Procedure  : " .a:proc. "\n" . 
+                 \ "--\n" .
+                 \ "-- Description: \n" . 
+                 \ "--\n" .
+                 \ "-- ========================================================================\n" .
+                 \ "CREATE PROCEDURE " .a:proc. "\n" . 
+                 \ "(\n" . 
+                 \ "  @varX INT\n" . 
+                 \ ")\n" .
+                 \ "AS\n" .
+                 \ "  SET NOCOUNT ON\n" .
+                 \ "\n" .
+                 \ "GO\n" . 
+                 \ "SET QUOTED_IDENTIFIER OFF\n" . 
+                 \ "GO\n" . 
+                 \ "SET ANSI_NULLS ON \n" . 
+                 \ "GO\n" 
+    return result
+endfunction
+
 "}}}
 " FIREBIRD exec {{{
 function! s:DB_FIREBIRD_execSql(str)
@@ -3620,6 +3990,16 @@ function! s:DB_FIREBIRD_getDictionaryView() "{{{
     let result = s:DB_FIREBIRD_getListView('')
     return s:DB_FIREBIRD_stripHeaderFooter(result)
 endfunction "}}}
+
+function! s:DB_FIREBIRD_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
+
+function! s:DB_FIREBIRD_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction 
 "}}}
 " DBI (Perl) exec {{{
 function! s:DB_DBI_Autoload()

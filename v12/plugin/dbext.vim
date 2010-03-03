@@ -1,17 +1,18 @@
 " dbext.vim - Commn Database Utility
 " Copyright (C) 2002-7, Peter Bagyinszki, David Fishburn
 " ---------------------------------------------------------------
-" Version:       11.01
+" Version:       12.00
 " Maintainer:    David Fishburn <dfishburn dot vim at gmail dot com>
-" Authors:       Peter Bagyinszki <petike1 at dpg dot hu>
+" Authors:       Peter Bagyinszki <petike1 at gmail dot com>
 "                David Fishburn <dfishburn dot vim at gmail dot com>
-" Last Modified: 2009 Aug 27
+" Last Modified: 2010 Mar 3
 " Based On:      sqlplus.vim (author: Jamis Buck)
 " Created:       2002-05-24
 " Homepage:      http://vim.sourceforge.net/script.php?script_id=356
 " Contributors:  Joerg Schoppet <joerg dot schoppet at web dot de>
 "                Hari Krishna Dara <hari_vim at yahoo dot com>
 "                Ron Aaron
+"                Zoltan Klinger <zoltan dot klinger at gmail dot com>
 "
 " SourceForge:  $Revision: 1.38 $
 "
@@ -38,7 +39,7 @@ if v:version < 700
     echomsg "dbext: Version 4.00 or higher requires Vim7.  Version 3.50 can stil be used with Vim6."
     finish
 endif
-let g:loaded_dbext = 1101
+let g:loaded_dbext = 1200
 
 if !exists('g:dbext_default_menu_mode')
     let g:dbext_default_menu_mode = 3
@@ -215,6 +216,16 @@ if !exists(':DBResultsToggleResize')
     command! -nargs=0 DBResultsToggleResize
                 \ :call dbext#DB_windowResize()
 end
+if !exists(':DBGetStoredProcBody')
+    command! -nargs=* -range DBGetStoredProcBody
+                \ :call dbext#DB_getStoredProcBody(<args>)
+    nmap <unique> <script> <Plug>DBGetStoredProcBody :DBGetStoredProcBody<CR>
+endif
+if !exists(':DBGetStoredProcTemplate')
+    command! -nargs=0 DBGetStoredProcTemplate
+                \ :call dbext#DB_getStoredProcTemplate()
+    nmap <unique> <script> <Plug>DBGetStoredProcTemplate :DBGetStoredProcTemplate<CR>
+endif
 "}}}
 " Mappings {{{
 if !hasmapto('<Plug>DBExecVisualSQL') && !hasmapto('<Leader>se', 'v')
@@ -346,6 +357,21 @@ if !hasmapto('DBListVar')
         nmap <unique> <silent> <Leader>slr :DBListVar<CR>
     endif
 endif
+if !hasmapto('<Plug>DBGetStoredProcBody')  
+    if !hasmapto('<Leader>spb', 'n')
+        nmap <unique> <silent> <Leader>spb
+                    \ :<C-U>exec 'DBGetStoredProcBody'<CR>
+    endif
+    if !hasmapto('<Leader>spb', 'v')
+        xmap <unique> <silent> <Leader>spb
+                    \ :<C-U>exec 'DBGetStoredProcBody "'.DB_getVisualBlock().'"'<CR>
+    endif
+endif
+if !hasmapto('<Plug>DBGetStoredProcTemplate')  
+    if !hasmapto('<Leader>spn', 'n')
+        nmap <unique> <Leader>spt <Plug>DBGetStoredProcTemplate
+    endif
+endif
 "}}}
 " Menus {{{
 if has("gui_running") && has("menu") && g:dbext_default_menu_mode != 0
@@ -395,6 +421,9 @@ if has("gui_running") && has("menu") && g:dbext_default_menu_mode != 0
     exec 'inoremenu <script> '.menuRoot.'.Table\ List<TAB>'.leader.'slt  <C-O>:DBListTable<CR>'
     exec 'noremenu  <script> '.menuRoot.'.Procedure\ List<TAB>'.leader.'slp  :DBListProcedure<CR>'
     exec 'inoremenu <script> '.menuRoot.'.Procedure\ List<TAB>'.leader.'slp  <C-O>:DBListProcedure<CR>'
+    exec 'vnoremenu <script> '.menuRoot.'.Procedure\ Body\ (Visual\ selection)<TAB>'.leader.'spb  :<C-U>exec ''DBGetStoredProcBody "''.DB_getVisualBlock().''"''<CR>'
+    exec 'noremenu  <script> '.menuRoot.'.Procedure\ Body<TAB>'.leader.'spb :DBGetStoredProcBody<CR>'
+    exec 'noremenu  <script> '.menuRoot.'.Procedure\ Template<TAB>'.leader.'spt :DBGetStoredProcTemplate<CR>'
     exec 'noremenu  <script> '.menuRoot.'.View\ List<TAB>'.leader.'slv  :DBListView<CR>'
     exec 'inoremenu <script> '.menuRoot.'.View\ List<TAB>'.leader.'slv  <C-O>:DBListView<CR>'
     exec 'vnoremenu <script> '.menuRoot.'.Assign\ Variable\ (Visual\ selection)<TAB>'.leader.'sa :DBVarRangeAssign<CR>'
