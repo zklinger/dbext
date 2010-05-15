@@ -29,6 +29,7 @@ Homepage: http://vim.sourceforge.net/script.php?script_id=356
     5.3 Database Specific Options             |dbext-configure-options|
     5.4 DB2 Modes                             |dbext-configure-db2|
     5.5 DBI Installation                      |dbext-configure-dbi|
+    5.6 Table names convention                |dbext-table-names|
 6.  Mappings and commands		      |dbext-mappings|
 7.  Adding new database types		      |dbext-newdb|
 8.  Prompting for input parameters	      |dbext-prompting|
@@ -1477,7 +1478,7 @@ Version 2.00
 5.5 DBI Installation                                    *dbext-configure-dbi*
     To use the DBI interface you must first have a Perl enabled Vim.
     You can test your installation by running this command: >
-        :echo has('perl')
+       :echo has('perl')
 <
     If you Vim is not Perl enabled you can:
         1.  Compile your own Vim and enable it.  Tony Mechelynck has posted
@@ -1556,6 +1557,47 @@ Version 2.00
             install Sybase-TdsServer
             install DBD-mysql
             quit
+
+5.6 Table names convention                                 *dbext-table-names*
+  
+  Most application follow naming convention between Models and realted table.
+  In most cases models are named in camelcase singular and tables in
+  underscore plural. By default dbext follow this convention.
+
+  Example:
+    when the cursor is on "ProjectIndustry" >
+        :DBSelectFromTable  
+<
+    will do:
+      "select * from project_industries"
+
+  
+  Table names number:
+
+      To get control over table names number convention use: >
+        let g:dbext_table_names_number 
+< 
+      Set to 0 if table names number should be as is
+      Set to 1 if table names should be singularized
+      Set to 2 if table names should be pluralized
+
+      Default: 2
+    
+  Table names case:
+      To get control over table names case convention use: >
+          let g:dbext_table_names_case
+<
+      Set to 0 if table names case should be as is
+      Set to 1 if table names should be camelized
+      Set to 2 if table names should be underscored
+
+      Default: 2
+    
+  
+    
+
+
+
 
 ==============================================================================
 6. Mappings and commands				*dbext-mappings*

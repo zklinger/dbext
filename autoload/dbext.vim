@@ -5396,6 +5396,10 @@ function! s:sub(str,pat,rep)
   return substitute(a:str,'\v\C'.a:pat,a:rep,'')
 endfunction
 
+function! s:gsub(str,pat,rep)
+  return substitute(a:str,'\v\C'.a:pat,a:rep,'g')
+endfunction
+
 function! s:singularize(word)
     " Probably not worth it to be not comprehensive but we can
     " still hit the common cases.
@@ -5428,13 +5432,33 @@ function! s:pluralize(word)
     return word
 endfunction
 
+function! s:underscore(str)
+  let str = s:gsub(a:str,'::','/')
+  let str = s:gsub(str,'(\u+)(\u\l)','\1_\2')
+  let str = s:gsub(str,'(\l|\d)(\u)','\1_\2')
+  let str = tolower(str)
+  return str
+endfunction
+
+function! s:camelize(str)
+  let str = s:gsub(a:str,'/(.=)','::\u\1')
+  let str = s:gsub(str,'%([_-]|<)(.)','\u\1')
+  return str
+endfunction
+
 function! s:DB_applyTableNameConvention(word)
-    if g:dbext_table_names_convention == 1
-            return s:singularize(a:word)
-    elseif g:dbext_table_names_convention == 2
-            return s:pluralize(a:word)
+    let result = a:word
+    if g:dbext_table_names_number == 1
+            let result = s:singularize(result)
+    elseif g:dbext_table_names_number == 2
+            let result =  s:pluralize(result)
     endif
-    return a:word
+    if g:dbext_table_names_case == 1
+        let result = s:camelize(result)
+    elseif g:dbext_table_names_case == 2
+        let result = s:underscore(result)
+    endif
+    return result
 endfunction
     
 

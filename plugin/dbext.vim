@@ -49,8 +49,12 @@ if !exists('g:dbext_rows_affected')
     let g:dbext_rows_affected = 0
 endif
 
-if !exists('g:dbext_table_names_convention')
-    let g:dbext_table_names_convention = 2
+if !exists('g:dbext_table_names_number')
+    let g:dbext_table_names_number= 2
+endif
+
+if !exists('g:dbext_table_names_case')
+    let g:dbext_table_names_case = 2
 endif
 
 " Commands {{{
