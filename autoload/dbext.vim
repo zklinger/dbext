@@ -5448,6 +5448,9 @@ endfunction
 
 function! s:DB_applyTableNameConvention(word)
     let result = a:word
+    if g:dbext_table_names_strip_id == 1
+        let result = substitute(result, '_\?ids\?$', '', '')
+    endif
     if g:dbext_table_names_number == 1
             let result = s:singularize(result)
     elseif g:dbext_table_names_number == 2
@@ -5458,6 +5461,7 @@ function! s:DB_applyTableNameConvention(word)
     elseif g:dbext_table_names_case == 2
         let result = s:underscore(result)
     endif
+
     return result
 endfunction
     

@@ -1565,17 +1565,27 @@ Version 2.00
   underscore plural. By default dbext follow this convention.
 
   Example:
-    when the cursor is on "ProjectIndustry" >
-        :DBSelectFromTable  
+      when the cursor is on "ProjectIndustry" >
+          :DBSelectFromTable  
 <
-    will do:
-      "select * from project_industries"
-
+      will do: >
+          select * from project_industries
+<
+  dbext can automatically strip id suffix from the word under cursor to get 
+  valid table name from string. 
+  
+  Example: 
+      when the cursor is on "category_id" or "category_ids" >
+          :DBSelectFromTable
+<
+      will do: >
+          select * from categories
+<
   
   Table names number:
 
       To get control over table names number convention use: >
-        let g:dbext_table_names_number 
+          let g:dbext_table_names_number 
 < 
       Set to 0 if table names number should be as is
       Set to 1 if table names should be singularized
@@ -1592,9 +1602,12 @@ Version 2.00
       Set to 2 if table names should be underscored
 
       Default: 2
-    
-  
-    
+
+  Strip ids option:
+      To disable strip ids option use: >
+          let g:dbext_table_names_strip_id = 0
+<
+      Default: 1
 
 
 

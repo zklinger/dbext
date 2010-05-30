@@ -57,6 +57,11 @@ if !exists('g:dbext_table_names_case')
     let g:dbext_table_names_case = 2
 endif
 
+
+if !exists('g:dbext_table_names_strip_id')
+    let g:dbext_table_names_strip_id = 1
+endif
+
 " Commands {{{
 command! -nargs=+ DBExecSQL         :call dbext#DB_execSql(<q-args>)
 command! -nargs=+ DBExecSQLTopX     :call dbext#DB_execSqlTopX(<q-args>)
