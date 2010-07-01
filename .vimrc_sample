@@ -6,34 +6,108 @@ let g:dbext_default_stored_proc_author = 'Zoltan Klinger'
 let g:dbext_default_SQLSRV_column_delimiter = '|'
 
 
-" dbext.vim callback function 
+" dbext.vim callback function
 function! DBextPostResult(db_type, buf_nr)
     " ==========================================================
     " If dealing with a SQL Server SQL query,
-    " nicely format the query results. 
+    " nicely format the query results.
     "
     " Note: It uses Align.vim plugin to do the formatting
     " ==========================================================
 
     if a:db_type == 'SQLSRV'
-      " Draw missing left and right hand side borders
-      2, $-1 normal I|
-      2, $-1 normal A|
-      1, $ s/^ *|/|/g
-      " Align each column with to the widest entry in that column
-      3s/-/ /g
-      AlignCtrl p0P0
-      2, $-1 Align |
+      let pos = 1
+      let headerRow = 1
+      let divRow = 1
+      let endRow = 1
+      let isEndRowSet = 1
+      let allLines = getbufline(a:buf_nr, 1, "$")
+      let rangeList = []
 
-      " Add missing top and bottom horizontal divider lines
-      3s/ /-/g
-      3s/|-/+-/g
-      3s/-|/-+/
-      3y
-      1 normal p
-      $ normal P
+      " Find the result sets in the buffer.
+      " Two fixed markers we can look for to figure out table start/end.
+      " These are:
+      "       "----"      dashed line between table header and detail row and
+      "       "affected)" just below the end of result set if SET NOCOUNT OFF
+      "                   is set for the query.
+      " Note: some queries may return a result set without a column header row
+      "       for instance "SELECT COUNT(*) FROM TABLE XYZ"
+
+      if string(allLines) =~ "----"
+        for line in allLines
+          if line =~ "----"
+            " A new div line found.
+            if !isEndRowSet
+              " Figure set endRow position
+              if (pos - divRow) == 2
+                let endRow = pos - 1
+              else
+                let endRow = pos - 2
+              endif
+              call add(rangeList, [headerRow, divRow, endRow])
+              let isEndRowSet = 1
+            endif
+            " New range starts
+            let divRow = pos
+            if (pos - endRow) == 1 || allLines[pos-1-1] =~ "affected)"
+              " No header
+              let headerRow = pos
+            else
+              let headerRow = pos - 1
+            endif
+            let endRow = len(allLines)
+            let isEndRowSet = 0
+          endif
+          if line =~ "affected)"
+            " End of current table found
+            let endRow = pos-1
+            call add(rangeList, [headerRow, divRow, endRow])
+            let isEndRowSet = 1
+          endif
+          let pos += 1
+        endfor
+      endif
+
+      if !isEndRowSet
+        call add(rangeList, [headerRow, divRow, endRow])
+      endif
+
+      " Format each result set in the buffer
+      let offset = 0
+      for range in rangeList
+        " Get the range of the current table
+        let headRow = range[0] + offset
+        let divRow  = range[1] + offset
+        let endRow  = range[2] + offset
+
+        " Set the text in the header lower case
+        execute headRow . "normal 0gu$"
+        " Draw missing left and right hand side borders
+        execute headRow ."," .  endRow . " normal I|"
+        execute headRow ."," .  endRow . " normal A|"
+        " Align each column width to the widest entry in that column
+        execute divRow . "s/-//g"
+        execute "AlignCtrl p0P0"
+        execute headRow . "," . endRow . "Align |"
+        " Restore horizontal border line and tidy up corners
+        execute divRow . "s/ /-/g"
+        execute divRow . "s/|-/+-/g"
+        execute divRow . "s/-|/-+/g"
+        " Add top and bottom horizontal dividers
+        execute divRow . "y"
+        if headRow != divRow
+          execute headRow  . "normal P"
+          execute endRow  + 1 . "normal p"
+          let offset +=2  " two new rows inserted
+        else
+          execute endRow . "normal p"
+          let offset +=1
+        endif
+      endfor
       normal gg
     endif
+    " Clear highlighting for previously matched characters
+    let @/ = ""
 
 endfunction
 
