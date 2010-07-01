@@ -3788,14 +3788,19 @@ endfunction "}}}
 
 function! s:DB_SQLSRV_getStoredProcBody(proc)
     " Set query
+    " Stored procedure body is stored in nvarchar(4000) rows
+    " Put a 'magic marker' (a non-printable character like ASCII 2)
+    " to mark the beginning of each database row so we can concatenate
+    " the rows and remove the additional \n characters that break the
+    " stored procedure text layout.
     let query = "set nocount on " .
-             \ "select text as ' ' " .
+             \ "select char(2) + convert(varchar(4000), text) as ' ' " .
              \ "from sysobjects so " .
              \ "inner join syscomments sc " .
              \ "on so.id = sc.id " .
              \ "where name = '" . a:proc . "' " .
-             \ "and xtype = 'P' " 
-    
+             \ "and xtype = 'P' "
+
     " Do not return the result in the result buffer
     let orig_use_result_buffer = s:DB_get('use_result_buffer')
     call s:DB_set('use_result_buffer', 0)
@@ -3809,6 +3814,11 @@ function! s:DB_SQLSRV_getStoredProcBody(proc)
     " Remove decorations from result
     let result = substitute(result, ' *\n-*\n', '', '')
     let result = substitute(result, ' *\n *\n$', '', '')
+
+    " Remove magic row markers from the result along with the layout breaking
+    " extra \n characters
+    let result = substitute(result, '\n\%x2', '', 'g')
+    let result = substitute(result, '\%x2', '', '')
 
     " Does the stored procedure exits?
     if result == "\n"
