@@ -3574,29 +3574,29 @@ function! s:DB_SQLSRV_describeTable(table_name)
     \ "  )  " .
     \ " " .
     \ "insert into #tableinfo " .
-    \ "select lower('" . colsep . " '+ c.column_name)  as 'field',  " .
+    \ "select lower('" . colsep . " '+ c.COLUMN_NAME)  as 'field',  " .
     \ "   case  " .
-    \ "     when character_maximum_length is null then ' ' + data_type " .
+    \ "     when CHARACTER_MAXIMUM_LENGTH is null then ' ' + data_type " .
     \ "     else ' ' + data_type  " .
-    \ "       + '(' + convert(varchar(20), character_maximum_length) + ')' " .
+    \ "       + '(' + convert(varchar(20), CHARACTER_MAXIMUM_LENGTH) + ')' " .
     \ "   end as type, " .
-    \ "   upper(' '  + is_nullable) as nullable, " .
-    \ "   case tc.constraint_type " .
+    \ "   upper(' '  + IS_NULLABLE) as nullable, " .
+    \ "   case tc.CONSTRAINT_TYPE " .
     \ "   	when 'check'       then 'CK' " .
     \ "   	when 'unique'      then 'UQ' " .
     \ "   	when 'primary key' then 'PK' " .
     \ "   	when 'foreign key' then 'FK' " .
     \ "      else '' " .
     \ "   end as keytype, " .
-    \ "   ' ' + isnull(c.column_default, '') as defvalue " .
-    \ " from information_schema.columns c " .
-    \ " left join information_schema.constraint_column_usage cu " .
-    \ "   on c.table_name       = cu.table_name " .
-    \ "  and c.column_name      = cu.column_name " .
-    \ " left join information_schema.table_constraints tc " .
-    \ "   on tc.table_name      = cu.table_name " .
-    \ "  and tc.constraint_name = cu.constraint_name " .
-    \ "where c.table_name       = '" . a:table_name . "' " .
+    \ "   ' ' + isnull(c.COLUMN_DEFAULT, '') as defvalue " .
+    \ " from INFORMATION_SCHEMA.COLUMNS c " .
+    \ " left join INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE cu " .
+    \ "   on c.TABLE_NAME       = cu.TABLE_NAME " .
+    \ "  and c.COLUMN_NAME      = cu.COLUMN_NAME " .
+    \ " left join INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc " .
+    \ "   on tc.TABLE_NAME      = cu.TABLE_NAME " .
+    \ "  and tc.CONSTRAINT_NAME = cu.CONSTRAINT_NAME " .
+    \ "where c.TABLE_NAME       = '" . a:table_name . "' " .
     \ " " .
     \ "select @fieldlen   = max(len(field)) + 1 " .
     \ "     , @typlen     = max(len(type)) + 1 " .
