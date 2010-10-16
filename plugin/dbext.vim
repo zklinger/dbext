@@ -1,17 +1,18 @@
 " dbext.vim - Commn Database Utility
 " Copyright (C) 2002-7, Peter Bagyinszki, David Fishburn
 " ---------------------------------------------------------------
-" Version:       11.01
+" Version:       12.00
 " Maintainer:    David Fishburn <dfishburn dot vim at gmail dot com>
 " Authors:       Peter Bagyinszki <petike1 at dpg dot hu>
 "                David Fishburn <dfishburn dot vim at gmail dot com>
-" Last Modified: 2009 Aug 27
+" Last Modified: 2010 Jul 15
 " Based On:      sqlplus.vim (author: Jamis Buck)
 " Created:       2002-05-24
 " Homepage:      http://vim.sourceforge.net/script.php?script_id=356
 " Contributors:  Joerg Schoppet <joerg dot schoppet at web dot de>
 "                Hari Krishna Dara <hari_vim at yahoo dot com>
 "                Ron Aaron
+"                Zoltan Klinger
 "
 " SourceForge:  $Revision: 1.38 $
 "
@@ -38,7 +39,7 @@ if v:version < 700
     echomsg "dbext: Version 4.00 or higher requires Vim7.  Version 3.50 can stil be used with Vim6."
     finish
 endif
-let g:loaded_dbext = 1101
+let g:loaded_dbext = 1200
 
 if !exists('g:dbext_default_menu_mode')
     let g:dbext_default_menu_mode = 3
@@ -75,16 +76,6 @@ command! -nargs=0 DBListVar         :call dbext#DB_sqlVarList()
 command! -nargs=1 -bang DBSetVar    :call dbext#DB_sqlVarAssignment(<bang>0, 'set '.<q-args>)
 command! -nargs=* -complete=customlist,dbext#DB_completeVariable DBSetVar :call dbext#DB_sqlVarAssignment(<bang>0, 'set '.<q-args>)
 
-if !exists(':DBGetStoredProcBody')
-    command! -nargs=0 DBGetStoredProcBody
-                \ :call dbext#DB_getStoredProcBody()
-    nmap <unique> <script> <Plug>DBGetStoredProcBody :DBGetStoredProcBody<CR>
-endif
-if !exists(':DBNewStoredProcBody')
-    command! -nargs=0 DBNewStoredProcBody
-                \ :call dbext#DB_newStoredProcBody()
-    nmap <unique> <script> <Plug>DBNewStoredProcBody :DBNewStoredProcBody<CR>
-endif
 if !exists(':DBExecVisualSQL')
     command! -nargs=0 -range DBExecVisualSQL :call dbext#DB_execSql(DB_getVisualBlock())
     xmap <unique> <script> <Plug>DBExecVisualSQL :DBExecVisualSQL<CR>
@@ -225,18 +216,18 @@ if !exists(':DBResultsToggleResize')
     command! -nargs=0 DBResultsToggleResize
                 \ :call dbext#DB_windowResize()
 end
+if !exists(':DBGetStoredProcBody')
+    command! -nargs=* -range DBGetStoredProcBody
+                \ :call dbext#DB_getStoredProcBody(<args>)
+    nmap <unique> <script> <Plug>DBGetStoredProcBody :DBGetStoredProcBody<CR>
+endif
+if !exists(':DBGetStoredProcTemplate')
+    command! -nargs=0 DBGetStoredProcTemplate
+                \ :call dbext#DB_getStoredProcTemplate()
+    nmap <unique> <script> <Plug>DBGetStoredProcTemplate :DBGetStoredProcTemplate<CR>
+endif
 "}}}
 " Mappings {{{
-if !hasmapto('<Plug>DBGetStoredProcBody')  
-    if !hasmapto('<Leader>sp', 'n')
-        nmap <unique> <Leader>sp <Plug>DBGetStoredProcBody
-    endif
-endif
-if !hasmapto('<Plug>DBNewStoredProcBody')  
-    if !hasmapto('<Leader>spn', 'n')
-        nmap <unique> <Leader>spn <Plug>DBNewStoredProcBody
-    endif
-endif
 if !hasmapto('<Plug>DBExecVisualSQL') && !hasmapto('<Leader>se', 'v')
     xmap <unique> <Leader>se <Plug>DBExecVisualSQL
 endif
@@ -366,6 +357,21 @@ if !hasmapto('DBListVar')
         nmap <unique> <silent> <Leader>slr :DBListVar<CR>
     endif
 endif
+if !hasmapto('<Plug>DBGetStoredProcBody')
+    if !hasmapto('<Leader>spb', 'n')
+        nmap <unique> <silent> <Leader>spb
+                    \ :<C-U>exec 'DBGetStoredProcBody'<CR>
+    endif
+    if !hasmapto('<Leader>spb', 'v')
+        xmap <unique> <silent> <Leader>spb
+                    \ :<C-U>exec 'DBGetStoredProcBody "'.DB_getVisualBlock().'"'<CR>
+    endif
+endif
+if !hasmapto('<Plug>DBGetStoredProcTemplate')
+    if !hasmapto('<Leader>spn', 'n')
+        nmap <unique> <Leader>spt <Plug>DBGetStoredProcTemplate
+    endif
+endif
 "}}}
 " Menus {{{
 if has("gui_running") && has("menu") && g:dbext_default_menu_mode != 0
@@ -415,6 +421,9 @@ if has("gui_running") && has("menu") && g:dbext_default_menu_mode != 0
     exec 'inoremenu <script> '.menuRoot.'.Table\ List<TAB>'.leader.'slt  <C-O>:DBListTable<CR>'
     exec 'noremenu  <script> '.menuRoot.'.Procedure\ List<TAB>'.leader.'slp  :DBListProcedure<CR>'
     exec 'inoremenu <script> '.menuRoot.'.Procedure\ List<TAB>'.leader.'slp  <C-O>:DBListProcedure<CR>'
+    exec 'vnoremenu <script> '.menuRoot.'.Procedure\ Body\ (Visual\ selection)<TAB>'.leader.'spb  :<C-U>exec ''DBGetStoredProcBody "''.DB_getVisualBlock().''"''<CR>'
+    exec 'noremenu  <script> '.menuRoot.'.Procedure\ Body<TAB>'.leader.'spb :DBGetStoredProcBody<CR>'
+    exec 'noremenu  <script> '.menuRoot.'.Procedure\ Template<TAB>'.leader.'spt :DBGetStoredProcTemplate<CR>'
     exec 'noremenu  <script> '.menuRoot.'.View\ List<TAB>'.leader.'slv  :DBListView<CR>'
     exec 'inoremenu <script> '.menuRoot.'.View\ List<TAB>'.leader.'slv  <C-O>:DBListView<CR>'
     exec 'vnoremenu <script> '.menuRoot.'.Assign\ Variable\ (Visual\ selection)<TAB>'.leader.'sa :DBVarRangeAssign<CR>'
@@ -426,34 +435,6 @@ if has("gui_running") && has("menu") && g:dbext_default_menu_mode != 0
     exec 'noremenu  <script> '.menuRoot.'.List\ Connections\ (DBI) :DBListConnections<CR>'
 endif
 "}}}
-function! s:DB_checkModeline()
-    " Users can preset connection string options using Vim's modeline 
-    " features.
-    " For example, in a SQL file you could have the following:
-    "      -- dbext:profile=ASA_generic,user=bob
-    " See the Help for more details.
-    let rc = -1
-    if ((&modeline == '0') || (&modelines < 1))
-        return rc
-    endif
-    let saveSearch = @/
-    let pattern = 'dbext:'
-    let from_bottom_line = ((&modelines > line('$'))?1:(line('$')-&modelines))
-
-    let savePos = 'normal! '.line(".").'G'.col(".")."\<bar>"
-    silent execute "normal! 1G0\<bar>"
-    while search( pattern, 'W' )
-        if( (line(".") >= 1 && line(".") <= &modelines) ||
-                    \ (line(".") >= from_bottom_line)   )
-            call dbext#DB_checkModeline()
-        endif
-    endwhile
-
-    let @/ = saveSearch
-    execute savePos
-    return rc
-endfunction
-
 function! DB_getDictionaryName( which ) 
     return dbext#DB_getDictionaryName( a:which )
 endfunction 
@@ -531,7 +512,7 @@ endfunction
 augroup dbext
     au!
     autocmd BufEnter    * if exists('g:loaded_dbext_auto') != 0 | exec "call dbext#DB_setTitle()" | endif
-    autocmd BufReadPost * if &modeline == 1 | call s:DB_checkModeline() | endif
+    autocmd BufReadPost * if &modeline == 1 | call dbext#DB_checkModeline() | endif
     autocmd BufDelete   * if exists('g:loaded_dbext_auto') != 0 | exec 'call dbext#DB_auBufDelete( expand("<abuf>") )' | endif
     autocmd VimLeavePre * if exists('g:loaded_dbext_auto') != 0 | exec 'call dbext#DB_auVimLeavePre()' | endif
 augroup END

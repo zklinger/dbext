@@ -1,18 +1,20 @@
 " dbext.vim - Commn Database Utility
 " Copyright (C) 2002-7, Peter Bagyinszki, David Fishburn
 " ---------------------------------------------------------------
-" Version:       11.01
+" Version:       12.00
 " Maintainer:    David Fishburn <dfishburn dot vim at gmail dot com>
 " Authors:       Peter Bagyinszki <petike1 at dpg dot hu>
 "                David Fishburn <dfishburn dot vim at gmail dot com>
-" Last Modified: 2009 Aug 27
+" Last Modified: 2010 Jul 15
 " Based On:      sqlplus.vim (author: Jamis Buck)
 " Created:       2002-05-24
 " Homepage:      http://vim.sourceforge.net/script.php?script_id=356
-" Contributors:  Joerg Schoppet <joerg dot schoppet at web dot de>
-"                Hari Krishna Dara <hari_vim at yahoo dot com>
+" Contributors:  Joerg Schoppet 
+"                Hari Krishna Dara 
 "                Ron Aaron
 "                Andi Stern
+"                Sergey Khorev
+"                Zoltan Klinger
 "
 " Help:         :h dbext.txt 
 "
@@ -37,7 +39,7 @@ if v:version < 700
     echomsg "dbext: Version 4.00 or higher requires Vim7.  Version 3.50 can stil be used with Vim6."
     finish
 endif
-let g:loaded_dbext_auto = 1101
+let g:loaded_dbext_auto = 1200
 
 " call confirm("Loaded dbext autoload", "&Ok")
 " Script variable defaults, these are used internal and are never displayed
@@ -171,7 +173,6 @@ function! s:DB_buildLists()
 
     " Script parameters
     let s:script_params_mv = []
-    call add(s:script_params_mv, 'stored_proc_author')
     call add(s:script_params_mv, 'use_result_buffer')
     call add(s:script_params_mv, 'buffer_lines')
     call add(s:script_params_mv, 'result_bufnr')
@@ -190,6 +191,7 @@ function! s:DB_buildLists()
     call add(s:script_params_mv, 'window_width')
     call add(s:script_params_mv, 'window_increment')
     call add(s:script_params_mv, 'login_script_dir')
+    call add(s:script_params_mv, 'stored_proc_author')
 
     " DB server specific params
     " See below for 3 additional DB2 items
@@ -321,84 +323,6 @@ endfunction
 "}}}
 
 " Configuration {{{
-
-" Get the stored procedure body for a user specified stored procedure
-function! dbext#DB_getStoredProcBody()
-    " Get name of stored procedure from the user
-    let query = inputdialog("Enter stored procedure name:", '')
-
-    if strlen(query) == 0
-        call s:DB_warningMsg("dbext:No stored procedure name supplied.")
-        return -1
-    endif
-    
-    " We need some additional database type information to continue
-    if s:DB_get("buffer_defaulted") != 1
-        let use_defaults = 1
-        let rc = s:DB_resetBufferParameters(use_defaults)
-        if rc == -1
-            call s:DB_warningMsg( 
-                        \ "dbext:A valid database type must ".
-                        \ "be chosen" 
-                        \ )
-            return rc
-        endif
-    endif
-    
-    " Run the query
-    let result =  dbext#DB_execFuncTypeWCheck('getStoredProcBody', query)
-
-    " Display result message
-    if result == '-1'
-        call s:DB_warningMsg("Stored procedure '" . query . "' not found.")
-    else
-        " Paste result in the paste register
-        if &clipboard == 'unnamed'
-            let @* = result 
-        else
-            let @@ = result 
-        endif
-        echo "Stored proc body for '". query . "' in paste register."
-    endif
-
-endfunction
-
-" Get the stored procedure template for a user specified stored procedure
-function! dbext#DB_newStoredProcBody()
-    " Get name of stored procedure from the user
-    let proc = inputdialog("Enter new stored procedure name:", '')
-
-    if strlen(proc) == 0
-        call s:DB_warningMsg("dbext:No stored procedure name supplied.")
-        return -1
-    endif
-    
-    " We need some additional database type information to continue
-    if s:DB_get("buffer_defaulted") != 1
-        let use_defaults = 1
-        let rc = s:DB_resetBufferParameters(use_defaults)
-        if rc == -1
-            call s:DB_warningMsg( 
-                        \ "dbext:A valid database type must ".
-                        \ "be chosen" 
-                        \ )
-            return rc
-        endif
-    endif
-    
-    " Get the stored proc template
-    let result =  dbext#DB_execFuncTypeWCheck('newStoredProcBody', proc)
-
-    " Paste result in the paste register
-    if &clipboard == 'unnamed'
-        let @* = result 
-    else
-        let @@ = result 
-    endif
-    echo "Stored proc template for '". proc . "' in paste register."
-
-endfunction
-
 "" Execute function, but prompt for parameters if necessary
 function! dbext#DB_execFuncWCheck(name,...)
     " Record current buffer to return to the correct one
@@ -952,7 +876,7 @@ function! s:DB_getDefault(name)
     elseif a:name ==# "FIREBIRD_SQL_Top_sub"    |return (exists("g:dbext_default_FIREBIRD_SQL_Top_sub")?g:dbext_default_FIREBIRD_SQL_Top_sub.'':'\1 FIRST @dbext_topX ')
     elseif a:name ==# "ORA_bin"                 |return (exists("g:dbext_default_ORA_bin")?g:dbext_default_ORA_bin.'':'sqlplus')
     elseif a:name ==# "ORA_cmd_header"          |return (exists("g:dbext_default_ORA_cmd_header")?g:dbext_default_ORA_cmd_header.'':"" .
-                        \ "set pagesize 10000\n" .
+                        \ "set pagesize 50000\n" .
                         \ "set wrap off\n" .
                         \ "set sqlprompt \"\"\n" .
                         \ "set linesize 10000\n" .
@@ -1477,7 +1401,6 @@ function! dbext#DB_checkModeline()
             if rc > -1
                 call s:DB_validateBufferParameters()
             endif
-            break
         else
             if( line(".") < from_bottom_line )
                 silent exec 'normal! '.from_bottom_line.'G'.col(".")."\<bar>"
@@ -1597,9 +1520,18 @@ function! dbext#DB_setMultipleOptions(multi_options, ...)
     endif
 
     " Special case due to regular expression syntax
-    if options_cs =~ 'variable_def_regex'
+    if options_cs =~ '\<variable_def_regex\>'
         let opt_value = substitute(options_cs, 'variable_def_regex\s*=\s*', '', '')
-        call s:DB_set('variable_def_regex', opt_value)
+        if opt_value =~ '^,'
+            let l:variable_def_regex = s:DB_get('variable_def_regex')
+            " if escape(','.l:variable_def_regex, '\\/.*$^~[]') !~ escape(opt_value, '\\/.*$^~[]')
+            if ','.l:variable_def_regex !~ escape(opt_value, '\\/.*$^~[]')
+                " Append to existing values if not already present
+                call s:DB_set('variable_def_regex', l:variable_def_regex.opt_value)
+            endif
+        else
+            call s:DB_set('variable_def_regex', opt_value)
+        endif
     else
         " Convert the comma separated list into a List
         let options_mv = split(options_cs, ':')
@@ -1659,6 +1591,78 @@ function! s:DB_fullPath2Bin(executable_name)
     endif
     return full_bin
 endfunction 
+
+function! dbext#DB_getStoredProcBody(...)
+    if a:0 == 0
+      " Get name of stored procedure from the user
+      let query = inputdialog("Enter stored procedure name:", '')
+      if strlen(query) == 0
+          return -1
+      endif
+    else
+      let query = a:1
+    endif
+
+    " We need some additional database type information to continue
+    if s:DB_get("buffer_defaulted") != 1
+        let use_defaults = 1
+        let rc = s:DB_resetBufferParameters(use_defaults)
+        if rc == -1
+            call s:DB_warningMsg(
+                        \ "dbext:A valid database type must ".
+                        \ "be chosen"
+                        \ )
+            return rc
+        endif
+    endif
+
+    " Run the query
+    let result =  dbext#DB_execFuncTypeWCheck('getStoredProcBody', query)
+    " Display result message
+    if result == '-1'
+        call s:DB_warningMsg("Stored procedure '" . query . "' not found.")
+    else
+        " Paste result in the paste register
+        if &clipboard == 'unnamed'
+            let @* = result
+        else
+            let @@ = result
+        endif
+        echo "Stored proc body for '". query . "' in paste register."
+    endif
+
+endfunction
+
+function! dbext#DB_getStoredProcTemplate()
+    " Get name of stored procedure name from the user
+    let proc = inputdialog("Enter new stored procedure name:", '')
+    if strlen(proc) == 0
+        return -1
+    endif
+
+    " We need some additional database type information to continue
+    if s:DB_get("buffer_defaulted") != 1
+        let use_defaults = 1
+        let rc = s:DB_resetBufferParameters(use_defaults)
+        if rc == -1
+            call s:DB_warningMsg(
+                        \ "dbext:A valid database type must ".
+                        \ "be chosen"
+                        \ )
+            return rc
+        endif
+    endif
+
+    " Get the stored proc template
+    let result =  dbext#DB_execFuncTypeWCheck('getStoredProcTemplate', proc)
+    " Paste result in the paste register
+    if &clipboard == 'unnamed'
+        let @* = result
+    else
+        let @@ = result
+    endif
+    echo "Stored proc template for '". proc . "' in paste register."
+endfunction
 "}}}
 
 " ASA exec {{{
@@ -1903,6 +1907,16 @@ function! s:DB_ASA_getDictionaryView()
                 \ )
     return s:DB_ASA_stripHeaderFooter(result)
 endfunction 
+
+function! s:DB_ASA_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_ASA_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " UltraLite exec {{{
 function! s:DB_ULTRALITE_execSql(str)
@@ -2027,6 +2041,16 @@ function! s:DB_ULTRALITE_getDictionaryView()
     echo 'UltraLite does not support views'
     return -1
 endfunction 
+
+function! s:DB_ULTRALITE_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_ULTRALITE_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " ASE exec {{{
 function! s:DB_ASE_execSql(str)
@@ -2188,6 +2212,17 @@ function! s:DB_ASE_getDictionaryView() "{{{
                 \ )
     return s:DB_ASE_stripHeaderFooter(result)
 endfunction "}}}
+
+function! s:DB_ASE_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_ASE_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
 "}}}
 " DB2 exec {{{
 function! s:DB_DB2_execSql(str)
@@ -2455,6 +2490,16 @@ function! s:DB_DB2_getDictionaryView()
                 \ )
     return s:DB_DB2_stripHeaderFooter(result)
 endfunction 
+
+function! s:DB_DB2_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_DB2_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " INGRES exec {{{
 function! s:DB_INGRES_execSql(str)
@@ -2537,6 +2582,16 @@ function! s:DB_INGRES_getDictionaryView()
     echo 'Feature not yet available'
     return -1
 endfunction 
+
+function! s:DB_INGRES_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_INGRES_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " INTERBASE exec {{{
 function! s:DB_INTERBASE_execSql(str)
@@ -2621,6 +2676,16 @@ function! s:DB_INTERBASE_getDictionaryView()
     echo 'Feature not yet available'
     return -1
 endfunction 
+
+function! s:DB_INTERBASE_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_INTERBASE_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " MYSQL exec {{{
 function! s:DB_MYSQL_execSql(str)
@@ -2816,10 +2881,9 @@ function! s:DB_MYSQL_getStoredProcBody(proc)
     else
         return '-1'
     endif
-
 endfunction
 
-function! s:DB_MYSQL_newStoredProcBody(proc)
+function! s:DB_MYSQL_getStoredProcTemplate(proc)
     if dbext#DB_getWType('version') < '5'
         call s:DB_warningMsg( 'dbext:MySQL does not support procedures' )
         return '-1'
@@ -2835,11 +2899,12 @@ function! s:DB_MYSQL_newStoredProcBody(proc)
                  \ "\n"  . 
                  \ "DROP PROCEDURE IF EXISTS `" .a:proc. "` $$\n" . 
                  \ "CREATE DEFINER=" .definer. " PROCEDURE `" .a:proc. "`(\n" . 
+                 \ "  _varX INT\n" .
                  \ ")\n" . 
                  \ "BEGIN\n" .
                  \ "-- ========================================================================\n" .
                  \ "-- Author     : " .user. "\n" . 
-                 \ "-- Created    : " . strftime("%Y-%m-%d") . "\n" .  
+                 \ "-- Created    : " . strftime("%Y %b %d %X") . "\n" .
                  \ "-- Procedure  : " .a:proc. "\n" . 
                  \ "--\n" .
                  \ "-- Description: \n" . 
@@ -2850,10 +2915,9 @@ function! s:DB_MYSQL_newStoredProcBody(proc)
                  \ "END $$\n" . 
                  \ "\n" .  
                  \ "DELIMITER ;\n"
-
     return result
-
 endfunction
+
 "}}}
 " SQLITE exec {{{
 function! s:DB_SQLITE_execSql(str)
@@ -2995,6 +3059,16 @@ function! s:DB_SQLITE_getDictionaryView()
     echo 'Feature not yet available'
     return -1
 endfunction 
+
+function! s:DB_SQLITE_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_SQLITE_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " ORA exec {{{
 function! s:DB_ORA_execSql(str)
@@ -3011,11 +3085,11 @@ function! s:DB_ORA_execSql(str)
     " Added quit to the end of the command to exit SQLPLUS
     if output !~ s:DB_escapeStr(terminator) . 
                 \ '['."\n".' \t]*$'
-        let output = output . terminator
+        let output = output . "\n" . terminator
      endif
  
     " Added quit to the end of the command to exit SQLPLUS
-    let output = output . "\nquit".terminator
+    let output = output . "\nquit"
 
     exe 'redir! > ' . s:dbext_tempfile
     silent echo output
@@ -3036,11 +3110,11 @@ function! s:DB_ORA_execSql(str)
 endfunction
 
 function! s:DB_ORA_describeTable(table_name)
-    return s:DB_ORA_execSql("desc " . a:table_name)
+    return s:DB_ORA_execSql("set linesize 100\ndesc " . a:table_name)
 endfunction
 
 function! s:DB_ORA_describeProcedure(procedure_name)
-    return s:DB_ORA_execSql("desc " . a:procedure_name)
+    return s:DB_ORA_execSql("set linesize 100\ndesc " . a:procedure_name)
 endfunction
 
 function! s:DB_ORA_getListTable(table_prefix)
@@ -3061,16 +3135,39 @@ endfunction
 function! s:DB_ORA_getListProcedure(proc_prefix)
     let owner      = toupper(s:DB_getObjectOwner(a:proc_prefix))
     let obj_name   = toupper(s:DB_getObjectName(a:proc_prefix))
-    let query =   "select object_name, owner ".
-                \ "  from all_objects ".
-                \ " where object_type IN ('PROCEDURE', 'PACKAGE', 'FUNCTION') ".
-                \ "   and object_name LIKE '".obj_name."%' "
-    if strlen(owner) > 0
-        let query = query .
-                    \ "   and owner = '".owner."' "
+    let pkg_name   = s:DB_getObjectOwner(obj_name)
+    if !empty(pkg_name)
+        let obj_name = s:DB_getObjectName(obj_name)
     endif
-    let query = query .
-                \ " order by object_name"
+
+    if !empty(owner)
+        if !empty(pkg_name) " schema.package.procedure
+            let query =   "select procedure_name object_name, owner ||'.'|| object_name owner ".
+                        \ "  from all_procedures ".
+                        \ " where object_type = 'PACKAGE' ".
+                        \ "   and procedure_name LIKE '".obj_name."%' ".
+                        \ "   and owner = '".owner."' and object_name = '".pkg_name."'"
+        else " schema.procedureORpackage or package.procedure
+            let query =   "select object_name, owner ".
+                        \ "  from all_objects ".
+                        \ " where object_type IN ('PROCEDURE', 'PACKAGE', 'FUNCTION') ".
+                        \ "   and object_name LIKE '".obj_name."%' ".
+                        \ "   and owner = '".owner."'".
+                        \ " UNION ALL ".
+                        \ "select procedure_name, object_name ".
+                        \ "  from all_procedures ".
+                        \ " where object_type = 'PACKAGE' ".
+                        \ "   and object_name = '".owner."'".
+                        \ "   and procedure_name LIKE '".obj_name."%'"
+        endif
+    else " just a name
+        let query =   "select object_name, owner ".
+                    \ "  from all_objects ".
+                    \ " where object_type IN ('PROCEDURE', 'PACKAGE', 'FUNCTION') " .
+                    \ "   and object_name LIKE '".obj_name."%' "
+    endif
+
+    let query .= " order by 1"
     return s:DB_ORA_execSql( query )
 endfunction
 
@@ -3084,8 +3181,7 @@ function! s:DB_ORA_getListView(view_prefix)
         let query = query .
                     \ "   and owner = '".owner."' "
     endif
-    let query = query .
-                \ " order by view_name"
+    let query .= " order by view_name"
     return s:DB_ORA_execSql( query )
 endfunction 
 
@@ -3095,19 +3191,17 @@ function! s:DB_ORA_getListColumn(table_name) "{{{
     let query =   "select column_name     ".
                 \ "  from ALL_TAB_COLUMNS ".
                 \ " where table_name = '".table_name."' "
-    if strlen(owner) > 0
-        let query = query .
-                    \ "   and owner = '".owner."' "
+    if !empty(owner)
+        let query .= "   and owner = '".owner."' "
     endif
-    let query = query .
-                \ " order by column_id"
+    let query .= " order by column_id"
     let result = s:DB_ORA_execSql( query )
     return s:DB_ORA_stripHeaderFooter(result)
 endfunction "}}}
 
 function! s:DB_ORA_stripHeaderFooter(result) "{{{
     " Strip off column headers ending with a newline
-    let stripped = substitute( a:result, '\_.*-\s*'."[\<C-J>]", '', '' )
+    let stripped = substitute( a:result, '^\_.\{-}[- ]\+\n', '', 'g' )
     let g:dbext_rows_affected = matchstr(stripped, '\zs\d\+\ze\s\+row')
     " Strip off query statistics
     let stripped = substitute( stripped, '\d\+ rows\_.*', '', '' )
@@ -3121,6 +3215,7 @@ endfunction "}}}
 
 function! s:DB_ORA_getDictionaryTable() "{{{
     let result = s:DB_ORA_execSql(
+                \ "set pagesize 0\n".
                 \ "select ".(s:DB_get('dict_show_owner')==1?"owner||'.'||":'')."table_name" .
                 \ "  from ALL_ALL_TABLES " .
                 \ " order by ".(s:DB_get('dict_show_owner')==1?"owner, ":'')."table_name  "
@@ -3129,24 +3224,45 @@ function! s:DB_ORA_getDictionaryTable() "{{{
 endfunction "}}}
 
 function! s:DB_ORA_getDictionaryProcedure() "{{{
-    let result = s:DB_ORA_execSql(
-                \ "select ".(s:DB_get('dict_show_owner')==1?"owner||'.'||":'')."object_name                          " .
+    let query = "set pagesize 0\n".
+                \"select ".(s:DB_get('dict_show_owner')==1?"owner||'.'||":'')."object_name                          " .
                 \ "  from all_objects                          " .
                 \ " where object_type IN                       " .
                 \ "       ('PROCEDURE', 'PACKAGE', 'FUNCTION') " .
-                \ " order by ".(s:DB_get('dict_show_owner')==1?"owner, ":'')."object_name                       "
-                \ )
+                \ " UNION ALL " .
+                \ "select ".(s:DB_get('dict_show_owner')==1?"owner||'.'||object_name||'.'||":'')."procedure_name            " .
+                \ "  from all_procedures                       " .
+                \ " where object_type = 'PACKAGE' and procedure_name is not null "
+    if s:DB_get('dict_show_owner')==1
+        let query .= " UNION ALL " .
+                \ "select object_name||'.'||procedure_name     " .
+                \ "  from all_procedures                       " .
+                \ " where object_type = 'PACKAGE' and procedure_name is not null "
+    endif
+    let query .= " order by 1"
+    let result = s:DB_ORA_execSql(query)
     return s:DB_ORA_stripHeaderFooter(result)
 endfunction "}}}
 
 function! s:DB_ORA_getDictionaryView() "{{{
     let result = s:DB_ORA_execSql(
+                \ "set pagesize 0\n".
                 \ "select ".(s:DB_get('dict_show_owner')==1?"owner||'.'||":'')."view_name    " .
                 \ "  from ALL_VIEWS    " .
                 \ " order by ".(s:DB_get('dict_show_owner')==1?"owner, ":'')."view_name "
                 \ )
     return s:DB_ORA_stripHeaderFooter(result)
 endfunction "}}}
+
+function! s:DB_ORA_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_ORA_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " PGSQL exec {{{
 function! s:DB_PGSQL_execSql(str)
@@ -3307,6 +3423,16 @@ function! s:DB_PGSQL_getDictionaryView()
                 \ )
     return s:DB_PGSQL_stripHeaderFooter(result)
 endfunction 
+
+function! s:DB_PGSQL_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_PGSQL_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " RDB exec {{{
 function! s:DB_RDB_describeProcedure(procedure_name) "{{{
@@ -3511,6 +3637,16 @@ function! s:DB_RDB_stripHeaderFooter(result) "{{{
     let stripped = substitute( stripped, '\(\<\w\+\>\)\s*\(\n\)', '\1\2', '' )
     return stripped
 endfunction "}}}
+
+function! s:DB_RDB_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_RDB_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " SQLSRV exec {{{
 function! s:DB_SQLSRV_execSql(str)
@@ -3554,27 +3690,10 @@ function! s:DB_SQLSRV_execSql(str)
     return result
 endfunction
 
-" Describe table used to just call sp_help <tablename> resulting in a messy
-" and hard to read output. The modified DB_SQLSRV_describeTable() function
-" creates a neatly formatted table output.
 function! s:DB_SQLSRV_describeTable(table_name)
-    let colsep  = s:DB_get('SQLSRV_column_delimiter')
+    " Describe the table much like the way MySql does it
     let query = "set nocount on " .
-    \ "declare @fieldlen   varchar(5) " .
-    \ "declare @typlen     varchar(5) " .
-    \ "declare @defaultlen varchar(5) " .
-    \ "declare @sql        nvarchar(4000) " .
-    \ " " .
-    \ "create table #tableinfo ( " .
-    \ "  field     nvarchar(131), " .
-    \ "  type      nvarchar(50), " .
-    \ "  nullable  varchar(4), " .
-    \ "  keytype   varchar(2), " .
-    \ "  defvalue  nvarchar(3500) " .
-    \ "  )  " .
-    \ " " .
-    \ "insert into #tableinfo " .
-    \ "select lower('" . colsep . " '+ c.COLUMN_NAME)  as 'field',  " .
+    \ "select  lower(c.COLUMN_NAME)  as [field],  " .
     \ "   case  " .
     \ "     when CHARACTER_MAXIMUM_LENGTH is null then ' ' + data_type " .
     \ "     else ' ' + data_type  " .
@@ -3596,59 +3715,8 @@ function! s:DB_SQLSRV_describeTable(table_name)
     \ " left join INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc " .
     \ "   on tc.TABLE_NAME      = cu.TABLE_NAME " .
     \ "  and tc.CONSTRAINT_NAME = cu.CONSTRAINT_NAME " .
-    \ "where c.TABLE_NAME       = '" . a:table_name . "' " .
-    \ " " .
-    \ "select @fieldlen   = max(len(field)) + 1 " .
-    \ "     , @typlen     = max(len(type)) + 1 " .
-    \ "     , @defaultlen = case " .
-    \ "                       when max(len(defvalue)) < 7 then 7 + 2 " .
-    \ "                       else max(len(defvalue)) + 1 " . 
-    \"                      end " .
-    \ "  from #tableinfo " .
-    \ " " .
-    \ "set @sql = N'select convert(char(' + @fieldlen + ') , + field) as ''" . colsep . " Field'', ' + " .
-    \ "  N' convert(char(' + @typlen + ') , type) as '' Type'', ' + " .
-    \ "  N' nullable as '' Null '', ' + " .
-    \ "  N' '' '' + keytype as '' Key '', ' + " .
-    \ "  N' convert(char(' + @defaultlen + ') , defvalue ) + ''" . colsep . "'' as '' Default'' ' + " .
-    \ "  N'from #tableinfo' " .
-    \ "exec sp_executesql @sql " .
-    \ " " .
-    \ "drop table #tableinfo " 
-
-    " Do not directly put the results in the result buffer
-    " We'll have to do a bit of tidying up first
-    let orig_use_result_buffer = s:DB_get('use_result_buffer')
-    call s:DB_set('use_result_buffer', 0)
-
-    " Run the query and capture the output
-    let result = s:DB_SQLSRV_execSql(query)
-
-    " Restore use_result_buffer setting
-    call s:DB_set('use_result_buffer', orig_use_result_buffer)
-
-    if result == ''
-      let result = "Table '" . a:table_name . "' does not exist"
-    else
-      " Draw a nice looking table around the result set
-      let srch = colsep . ' Field'
-      let repl = '\n' . colsep. ' Field'
-      let result = substitute(result, srch, repl, '')
-      let repl = colsep. '\n-'
-      let result = substitute(result, ' \n-', repl, '')
-      let result = substitute(result, '\n-', '\n+', '')
-      let result = substitute(result, '-\n', '+\n', '')
-      let srch = '-'.colsep.'-'
-      let result = substitute(result, srch, '-+-', 'g')
-      call s:DB_addToResultBuffer(result, "clear")
-      let rowsep =  getbufline(bufnr(s:DB_resBufName()), 3, 3)[0]
-      let result = rowsep . result . rowsep
-    endif
-
-    " Add the formatted result into the result buffer
-    call s:DB_addToResultBuffer(result, "clear")
-
-    return 0
+    \ "where c.TABLE_NAME       = '" . a:table_name . "' "
+    return s:DB_SQLSRV_execSql(query)
 endfunction
 
 function! s:DB_SQLSRV_describeProcedure(procedure_name)
@@ -3755,17 +3823,22 @@ function! s:DB_SQLSRV_getDictionaryView() "{{{
                 \ )
     return s:DB_SQLSRV_stripHeaderFooter(result)
 endfunction "}}}
-function! s:DB_SQLSRV_getStoredProcBody(proc)
 
+function! s:DB_SQLSRV_getStoredProcBody(proc)
     " Set query
+    " Stored procedure body is stored in nvarchar(4000) rows
+    " Put a 'magic marker' (a non-printable character like ASCII 2)
+    " to mark the beginning of each database row so we can concatenate
+    " the rows and remove the additional \n characters that break the
+    " stored procedure text layout.
     let query = "set nocount on " .
-             \ "select text as ' ' " .
+             \ "select char(2) + convert(varchar(4000), text) as ' ' " .
              \ "from sysobjects so " .
              \ "inner join syscomments sc " .
              \ "on so.id = sc.id " .
              \ "where name = '" . a:proc . "' " .
-             \ "and xtype = 'P' " 
-    
+             \ "and xtype = 'P' "
+
     " Do not return the result in the result buffer
     let orig_use_result_buffer = s:DB_get('use_result_buffer')
     call s:DB_set('use_result_buffer', 0)
@@ -3779,6 +3852,11 @@ function! s:DB_SQLSRV_getStoredProcBody(proc)
     " Remove decorations from result
     let result = substitute(result, ' *\n-*\n', '', '')
     let result = substitute(result, ' *\n *\n$', '', '')
+
+    " Remove magic row markers from the result along with the layout breaking
+    " extra \n characters
+    let result = substitute(result, '\n\%x2', '', 'g')
+    let result = substitute(result, '\%x2', '', '')
 
     " Does the stored procedure exits?
     if result == "\n"
@@ -3799,16 +3877,13 @@ function! s:DB_SQLSRV_getStoredProcBody(proc)
                  \ "GO\n" . 
                  \ "SET ANSI_NULLS ON \n" . 
                  \ "GO\n" 
-
     return result
-
 endfunction
 
-function! s:DB_SQLSRV_newStoredProcBody(proc)
-
+function! s:DB_SQLSRV_getStoredProcTemplate(proc)
     " Get defaults
     let user = s:DB_get('stored_proc_author')
-    
+
     " Create stored procedure body
     let result = "SET QUOTED_IDENTIFIER OFF \n" . 
                  \ "GO\n" . 
@@ -3816,7 +3891,7 @@ function! s:DB_SQLSRV_newStoredProcBody(proc)
                  \ "GO\n" . 
                  \ "-- ========================================================================\n" .
                  \ "-- Author     : " .user. "\n" . 
-                 \ "-- Created    : " . strftime("%Y-%m-%d") . "\n" .  
+                 \ "-- Created    : " . strftime("%Y %b %d %X") . "\n" .
                  \ "-- Procedure  : " .a:proc. "\n" . 
                  \ "--\n" .
                  \ "-- Description: \n" . 
@@ -3827,16 +3902,16 @@ function! s:DB_SQLSRV_newStoredProcBody(proc)
                  \ "  @varX INT\n" . 
                  \ ")\n" .
                  \ "AS\n" .
+                 \ "  SET NOCOUNT ON\n" .
                  \ "\n" .
                  \ "GO\n" . 
                  \ "SET QUOTED_IDENTIFIER OFF\n" . 
                  \ "GO\n" . 
                  \ "SET ANSI_NULLS ON \n" . 
                  \ "GO\n" 
-
     return result
-
 endfunction
+
 "}}}
 " FIREBIRD exec {{{
 function! s:DB_FIREBIRD_execSql(str)
@@ -3963,6 +4038,16 @@ function! s:DB_FIREBIRD_getDictionaryView() "{{{
     let result = s:DB_FIREBIRD_getListView('')
     return s:DB_FIREBIRD_stripHeaderFooter(result)
 endfunction "}}}
+
+function! s:DB_FIREBIRD_getStoredProcBody(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
+
+function! s:DB_FIREBIRD_getStoredProcTemplate(proc)
+    echo 'Feature not yet available'
+    return -1
+endfunction
 "}}}
 " DBI (Perl) exec {{{
 function! s:DB_DBI_Autoload()
@@ -4209,8 +4294,8 @@ function! s:DB_DBI_describeProcedure(procedure_name)
 
     " The owner name can be optionally followed by a "." due to the syntax of
     " some of the different databases (ASE and SQL Server)
-    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_owner\.\?', owner, '')
-    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_name', object, '')
+    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_owner\.\?', owner, 'g')
+    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_name', object, 'g')
     
     let cmd = "perl db_query()"
     exec cmd
@@ -4362,8 +4447,8 @@ function! s:DB_DBI_getListProcedure(proc_prefix)
         return -1
     endif
 
-    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_owner', owner, '')
-    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_name', object, '')
+    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_owner', owner, 'g')
+    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_name', object, 'g')
     
     let cmd = "perl db_query()"
     exec cmd
@@ -4776,8 +4861,8 @@ function! s:DB_ODBC_describeProcedure(procedure_name)
 
     " The owner name can be optionally followed by a "." due to the syntax of
     " some of the different databases (ASE and SQL Server)
-    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_owner\.\?', owner, '')
-    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_name', object, '')
+    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_owner\.\?', owner, 'g')
+    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_name', object, 'g')
     
     let cmd = "perl db_query()"
     exec cmd
@@ -4948,8 +5033,8 @@ function! s:DB_ODBC_getListProcedure(proc_prefix)
         return -1
     endif
 
-    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_owner', owner, '')
-    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_name', object, '')
+    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_owner', owner, 'g')
+    let g:dbext_dbi_sql = substitute(g:dbext_dbi_sql, 'dbext_replace_name', object, 'g')
     
     let cmd = "perl db_query()"
     exec cmd
@@ -5824,7 +5909,7 @@ function! s:DB_getObjectOwner(object) "{{{
     " \("\|\[\)\? - ignore any quotes
     " \.          - must by followed by a .
     " let owner = matchstr( a:object, '^\s*\zs.*\ze\.' )
-    let owner = matchstr( a:object, '^\("\|\[\)\?\zs\.\{-}\ze\("\|\]\)\?\.' )
+    let owner = matchstr( a:object, '^\("\|\[\)\?\zs.\{-}\ze\("\|\]\)\?\.' )
     return owner
 endfunction "}}}
 function! s:DB_getObjectName(object) "{{{ 
@@ -7802,10 +7887,11 @@ function! s:DB_parsePerl(query)
 
     " Prompt for the variables which are part of
     " string concentations like this:
-    "   "SELECT * FROM " + prefix+"product"
-    "   "SELECT * FROM " + obj.method() +"product"
+    "   "SELECT * FROM " + $prefix+"product"
+    "   "SELECT * FROM " + $obj.method() +"product"
     "   "SELECT * FROM " . method() ."product"
-    let var_expr = '"\s*\(+\|\.\)\s*\(.\{-}\)\s*\(+\|\.\)\s*"'
+    "   "SELECT * FROM product WHERE c1 = $mycol AND c2 = ".$cols[2];
+    let var_expr = '"\s*\(+\|\.\)\s*\(.\{-}\)\s*\(\(\(+\|\.\)\s*"\)\|;\|$\)'
     "  "\s*       - Double quote followed any space 
     "  \(+\|\.\)  - A plus sign or period
     "  \s*        - Any space
@@ -7813,6 +7899,12 @@ function! s:DB_parsePerl(query)
     "  \s*        - Any space
     "  \(+\|\.\)  - A plus sign or period
     "  \s*"       - Any space followed by a double quote
+    let query = s:DB_searchReplace(query, var_expr, var_expr, 0)
+
+    " Prompt for $ variables 
+    "   "SELECT * FROM product WHERE c1 = $mycol "
+    let var_expr = '\(\$\w\+\)'
+    "  \(\$\w\+\)  - The variable / obj / method beginning with a $
     let query = s:DB_searchReplace(query, var_expr, var_expr, 0)
 
     return query
@@ -7926,7 +8018,7 @@ function! s:DB_parseProfile(value)
     let no_defaults = 0
     let rc = s:DB_resetBufferParameters(no_defaults)
 
-    if profile_value =~? 'profile'
+    if profile_value =~? '\<profile\>'
         let rc = -1
         call s:DB_warningMsg('dbext: Profiles cannot be nested' )
         return -1

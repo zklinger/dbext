@@ -22,14 +22,14 @@ plus additional features written by
   Zoltan Klinger <zoltan dot klinger at gmail dot com>
 
 New features:
-  DBNewStoredProc 
+  DBGetStoredProcTemplate
     Inserts a stored procedure body template with
       * Author
       * Current date
       * Description
     fields. 
 
-  DBNewStoredProcBody
+  DBGetStoredProcBody
     Displays the stored procedure body for a given stored proc
 
 
