@@ -1,11 +1,11 @@
 " dbext.vim - Commn Database Utility
 " Copyright (C) 2002-7, Peter Bagyinszki, David Fishburn
 " ---------------------------------------------------------------
-" Version:       11.00
+" Version:       11.01
 " Maintainer:    David Fishburn <dfishburn dot vim at gmail dot com>
 " Authors:       Peter Bagyinszki <petike1 at dpg dot hu>
 "                David Fishburn <dfishburn dot vim at gmail dot com>
-" Last Modified: 2009 Aug 16
+" Last Modified: 2009 Aug 27
 " Based On:      sqlplus.vim (author: Jamis Buck)
 " Created:       2002-05-24
 " Homepage:      http://vim.sourceforge.net/script.php?script_id=356
@@ -37,7 +37,7 @@ if v:version < 700
     echomsg "dbext: Version 4.00 or higher requires Vim7.  Version 3.50 can stil be used with Vim6."
     finish
 endif
-let g:loaded_dbext_auto = 1100
+let g:loaded_dbext_auto = 1101
 
 " call confirm("Loaded dbext autoload", "&Ok")
 " Script variable defaults, these are used internal and are never displayed
@@ -171,7 +171,6 @@ function! s:DB_buildLists()
 
     " Script parameters
     let s:script_params_mv = []
-    call add(s:script_params_mv, 'stored_proc_author')
     call add(s:script_params_mv, 'use_result_buffer')
     call add(s:script_params_mv, 'buffer_lines')
     call add(s:script_params_mv, 'result_bufnr')
@@ -269,7 +268,6 @@ function! s:DB_buildLists()
 
     " Add 1 additional MySQL special cases
     call add(s:all_params_mv, 'MYSQL_version')
-    call add(s:all_params_mv, 'MYSQL_definer')
 
 
     " Any predefined global connection profiles in the users vimrc
@@ -318,58 +316,6 @@ endfunction
 "}}}
 
 " Configuration {{{
-function! dbext#DB_getStoredProcBody()
-    " Get name of stored procedure from the user
-    let query = input("Stored procedure: ")
-
-    if strlen(query) == 0
-        call s:DB_warningMsg("dbext:No stored procedure to display")
-        return -1
-    endif
-    
-    " We need some additional database type information to continue
-    if s:DB_get("buffer_defaulted") != 1
-        let use_defaults = 1
-        let rc = s:DB_resetBufferParameters(use_defaults)
-        if rc == -1
-            call s:DB_warningMsg( 
-                        \ "dbext:A valid database type must ".
-                        \ "be chosen" 
-                        \ )
-            return rc
-        endif
-    endif
-    
-    call dbext#DB_execFuncTypeWCheck('getStoredProcBody', query)
-    return 
-endfunction
-
-function! dbext#DB_newStoredProcBody()
-    " Get name of stored procedure from the user
-    let proc = input("New stored procedure: ")
-
-    if strlen(proc) == 0
-        call s:DB_warningMsg("dbext:No stored procedure to create")
-        return -1
-    endif
-    
-    " We need some additional database type information to continue
-    if s:DB_get("buffer_defaulted") != 1
-        let use_defaults = 1
-        let rc = s:DB_resetBufferParameters(use_defaults)
-        if rc == -1
-            call s:DB_warningMsg( 
-                        \ "dbext:A valid database type must ".
-                        \ "be chosen" 
-                        \ )
-            return rc
-        endif
-    endif
-    
-    call dbext#DB_execFuncTypeWCheck('newStoredProcBody', proc)
-    return 
-endfunction
-
 "" Execute function, but prompt for parameters if necessary
 function! dbext#DB_execFuncWCheck(name,...)
     " Record current buffer to return to the correct one
@@ -840,7 +786,6 @@ function! s:DB_getDefault(name)
     elseif a:name ==# "driver"                  |return (exists("g:dbext_default_driver")?g:dbext_default_driver.'':'') 
     elseif a:name ==# "driver_parms"            |return (exists("g:dbext_default_driver_parms")?g:dbext_default_driver_parms.'':'') 
     elseif a:name ==# "conn_parms"              |return (exists("g:dbext_default_conn_parms")?g:dbext_default_conn_parms.'':'') 
-    elseif a:name ==# "stored_proc_author"      |return (exists("g:dbext_default_stored_proc_author")?g:dbext_default_stored_proc_author.'':'<your name>')
     " ? - look for a question mark
     " w - MUST have word characters after it
     " W - CANNOT have any word characters after it
@@ -912,7 +857,6 @@ function! s:DB_getDefault(name)
     elseif a:name ==# "MYSQL_cmd_options"       |return (exists("g:dbext_default_MYSQL_cmd_options")?g:dbext_default_MYSQL_cmd_options.'':'')
     elseif a:name ==# "MYSQL_cmd_terminator"    |return (exists("g:dbext_default_MYSQL_cmd_terminator")?g:dbext_default_MYSQL_cmd_terminator.'':';')
     elseif a:name ==# "MYSQL_version"           |return (exists("g:dbext_default_MYSQL_version")?g:dbext_default_MYSQL_version.'':'5')
-    elseif a:name ==# "MYSQL_definer"           |return (exists("g:dbext_default_MYSQL_definer")?g:dbext_default_MYSQL_definer.'':'root@localhost')
     elseif a:name ==# "MYSQL_SQL_Top_pat"       |return (exists("g:dbext_default_MYSQL_SQL_Top_pat")?g:dbext_default_MYSQL_SQL_Top_pat.'':'\(.*\)')
     elseif a:name ==# "MYSQL_SQL_Top_sub"       |return (exists("g:dbext_default_MYSQL_SQL_Top_sub")?g:dbext_default_MYSQL_SQL_Top_sub.'':'\1 LIMIT @dbext_topX ')
     elseif a:name ==# "FIREBIRD_bin"            |return (exists("g:dbext_default_FIREBIRD_bin")?g:dbext_default_FIREBIRD_bin.'':'isql')
@@ -2746,96 +2690,6 @@ function! s:DB_MYSQL_getDictionaryView() "{{{
     let result = s:DB_MYSQL_execSql(query)
     return s:DB_MYSQL_stripHeaderFooter(result)
 endfunction "}}}
-
-function! s:DB_MYSQL_getStoredProcBody(proc)
-
-    " Set query
-    let database = s:DB_get("dbname")
-    let query = "select  concat('DELIMITER $$\n\n', " .
-   \ "'DROP PROCEDURE IF EXISTS `', name, '` $$\n', " .
-   \ "'CREATE DEFINER=`', replace(definer, '@','`@`'), '` PROCEDURE `', name, '`(', " .
-   \ "cast(param_list as char), " .
-   \ "')\n', " .
-   \ "cast(body as char), ' $$\n\n', " .
-   \ "'DELIMITER ;') as 'AABBCCDDEEFFGG' " .
-   \ "from mysql.proc " .
-   \ "where db='". database . "' and name='" . a:proc . "'"
-
-   " Add query to internal history
-    call s:DB_historyAdd(query)
-    
-    if query != ""
-        " Do not return the result in the result buffer
-        let orig_use_result_buffer = s:DB_get('use_result_buffer')
-        call s:DB_set('use_result_buffer', 0)
-
-        " Run the query
-        let result = s:DB_MYSQL_execSql(query)
-
-        " Remove decorations from result
-        let result = substitute(result, '+[+-]*\n','','g') 
-        let result = substitute(result, '| AABBCCDDEEFFGG *|', '','g')
-        let result = substitute(result, '| DELIMITER \$\$','DELIMITER $$','g') 
-        let result = substitute(result, 'DELIMITER ; |','DELIMITER ;','g') 
-        let result = substitute(result, '\r\n','\n','g') 
-
-        " Paste it into the origina buffer
-        exe "normal o" .result."\<C-R>"
-
-        " Restore use_result_buffer setting
-        call s:DB_set('use_result_buffer', orig_use_result_buffer)
-
-        return 
-    else
-       " If the query was cancelled, close the history 
-       " window which was opened when we added the 
-       " query above.
-        call dbext#DB_windowClose(s:DB_resBufName())
-    endif
-
-    return -1
-endfunction
-
-function! s:DB_MYSQL_newStoredProcBody(proc)
-    " Get defaults
-    let user = s:DB_get('stored_proc_author')
-    let definer = s:DB_get('MYSQL_definer')
-    let definer = '`' . substitute(definer, '@', '`@`', '') . '`'
-    
-    " Proc body
-    let result = "DELIMITER $$\n"   . 
-                 \ "\n"  . 
-                 \ "DROP PROCEDURE IF EXISTS `" .a:proc. "` $$\n" . 
-                 \ "CREATE DEFINER=" .definer. " PROCEDURE `" .a:proc. "`(\n" . 
-                 \ ")\n" . 
-                 \ "BEGIN\n" .
-                 \ "-- ========================================================================\n" .
-                 \ "-- Author     : " .user. "\n" . 
-                 \ "-- Created    : " . strftime("%Y-%m-%d") . "\n" .  
-                 \ "-- Procedure  : " .a:proc. "\n" . 
-                 \ "--\n" .
-                 \ "-- Description: \n" . 
-                 \ "--\n" .
-                 \ "-- ========================================================================\n" .
-                 \ "\n" . 
-                 \ "\n" . 
-                 \ "END $$\n" . 
-                 \ "\n" .  
-                 \ "DELIMITER ;\n"
-
-    " Do not return the result in the result buffer
-    let orig_use_result_buffer = s:DB_get('use_result_buffer')
-    call s:DB_set('use_result_buffer', 0)
-
-    " Paste result into the origina buffer
-    exe "normal o" .result."\<C-R>"
-
-    " Restore use_result_buffer setting
-    call s:DB_set('use_result_buffer', orig_use_result_buffer)
-
-    return 
-
-endfunction
 "}}}
 " SQLITE exec {{{
 function! s:DB_SQLITE_execSql(str)
@@ -3640,104 +3494,6 @@ function! s:DB_SQLSRV_getDictionaryView() "{{{
                 \ )
     return s:DB_SQLSRV_stripHeaderFooter(result)
 endfunction "}}}
-function! s:DB_SQLSRV_getStoredProcBody(proc)
-
-    " Set query
-   let query = "select text " .
-             \ "from sysobjects so " .
-             \ "inner join syscomments sc " .
-             \ "on so.id = sc.id " .
-             \ "where name = '" . a:proc . "' " .
-             \ "and xtype = 'P' " 
-
-   " Add query to internal history
-    call s:DB_historyAdd(query)
-    
-    if query != ""
-        " Do not return the result in the result buffer
-        let orig_use_result_buffer = s:DB_get('use_result_buffer')
-        call s:DB_set('use_result_buffer', 0)
-        exe "normal ma"
-
-        " Run the query
-        let result = s:DB_SQLSRV_execSql(query)
-
-        " Remove decorations from result
-        let result = substitute(result, 'CREATE PROCEDURE','ALTER PROCEDURE','') 
-
-        " Paste it into the origina buffer
-        exe "normal o" .result."\<C-R>"
-
-        " Mark the end position
-        exe "normal mb"
-        " Go the the beginning of the definition and remove decoration
-        exe "normal 'ad2j"
-        " Insert some text
-        let header = "SET QUOTED_IDENTIFIER OFF\nGO\nSET ANSI_NULLS OFF\nGO\n"
-        exe "normal O" . header . "\<C-R>"
-        " Move to the end of the definition
-        exe "normal 'bd3k"
-
-        " Insert footer
-        let footer = "SET QUOTED_IDENTIFIER OFF\nGO\nSET ANSI_NULLS ON\nGO"
-        exe "normal O" . footer . "\<C-R>"
-
-        " Restore use_result_buffer setting
-        call s:DB_set('use_result_buffer', orig_use_result_buffer)
-
-        return 
-    else
-       " If the query was cancelled, close the history 
-       " window which was opened when we added the 
-       " query above.
-        call dbext#DB_windowClose(s:DB_resBufName())
-    endif
-
-    return -1
-endfunction
-
-function! s:DB_SQLSRV_newStoredProcBody(proc)
-    " Get defaults
-    let user = s:DB_get('stored_proc_author')
-    
-    " Proc body
-    let result = "SET QUOTED_IDENTIFIER OFF \n" . 
-                 \ "GO\n" . 
-                 \ "SET ANSI_NULLS OFF \n" . 
-                 \ "GO\n" . 
-                 \ "-- ========================================================================\n" .
-                 \ "-- Author     : " .user. "\n" . 
-                 \ "-- Created    : " . strftime("%Y-%m-%d") . "\n" .  
-                 \ "-- Procedure  : " .a:proc. "\n" . 
-                 \ "--\n" .
-                 \ "-- Description: \n" . 
-                 \ "--\n" .
-                 \ "-- ========================================================================\n" .
-                 \ "CREATE PROCEDURE " .a:proc. "\n" . 
-                 \ "(\n" . 
-                 \ "    @varX INT\n" . 
-                 \ ")\n" . 
-                 \ "AS\n" .
-                 \ "\n" .
-                 \ "\n" .
-                 \ "SET QUOTED_IDENTIFIER OFF\n" . 
-                 \ "GO\n" . 
-                 \ "SET ANSI_NULLS ON \n" . 
-                 \ "GO\n" 
-
-    " Do not return the result in the result buffer
-    let orig_use_result_buffer = s:DB_get('use_result_buffer')
-    call s:DB_set('use_result_buffer', 0)
-
-    " Paste result into the origina buffer
-    exe "normal o" .result."\<C-R>"
-
-    " Restore use_result_buffer setting
-    call s:DB_set('use_result_buffer', orig_use_result_buffer)
-
-    return 
-
-endfunction
 "}}}
 " FIREBIRD exec {{{
 function! s:DB_FIREBIRD_execSql(str)
@@ -6293,10 +6049,6 @@ function! s:DB_runCmd(cmd, sql, result)
         endif
 
         call s:DB_addToResultBuffer(result, "add")
-        " Determine rows affected
-        if l:db_type !~ '\<DBI\>\|\<ODBC\>'
-            call s:DB_{l:db_type}_stripHeaderFooter(result)
-        endif
 
         let dbi_result = 0
         if exists("g:dbext_dbi_result")
@@ -6333,6 +6085,10 @@ function! s:DB_runCmd(cmd, sql, result)
                 endif
             endif
             if s:DB_get('autoclose') == '1' && s:dbext_result_count <= s:DB_get('autoclose_min_lines')
+                " Determine rows affected
+                if l:db_type !~ '\<DBI\>\|\<ODBC\>'
+                    call s:DB_{l:db_type}_stripHeaderFooter(result)
+                endif
                 if s:dbext_result_count >= 2
                     if getline(2) !~ '^SQLCode:'
                         call dbext#DB_windowClose(s:DB_resBufName())
@@ -6747,8 +6503,16 @@ function! s:DB_addToResultBuffer(output, do_clear)
             let cmd = "perl db_print_results('".dbi_orient."')"
             exec cmd
         else
+            let g:dbext_rows_affected = 0
+            let l:start_of_output = line('$')
             silent! exec "put = a:output"
+            let l:end_of_output = line('$')
+            " Temporarily set this value as a rough estimate
+            " (with low cost) to be refined in DB_runCmd 
+            " if the autoclose kicks in.
+            let g:dbext_rows_affected = l:end_of_output - l:start_of_output
         endif
+
     endif
 
     " Since this is a small window, remove any blanks lines
@@ -6883,7 +6647,7 @@ function! s:DB_searchReplace(str, exp_find_str, exp_get_value, count_matches)
                     endif
                 endif
 
-                if use_save_vars == 1
+                if use_save_vars == 1 && has_key(b:dbext_sqlvar_mv, var)
                     let var_val = b:dbext_sqlvar_mv[var]
                 else
                     " Prompt the user using the name of the variable
