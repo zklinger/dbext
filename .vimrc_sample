@@ -3,112 +3,125 @@
 let g:dbext_default_prompt_for_parameters=0
 let g:dbext_default_MYSQL_definer = 'zoltan@localhost'
 let g:dbext_default_stored_proc_author = 'Zoltan Klinger'
-let g:dbext_default_SQLSRV_column_delimiter = '|'
 
 
+"===========================================================================
 " dbext.vim callback function
+"  a) Colour the header row for each table in the result set
+"  b) Nicely format SQLServer query results. By default osql.exe
+"     does not trim the width of the returned columns to their widest
+"     data which makes viewing the results a bit awkward.
+"  Note: This script uses Align.vim plugin
+"        <www.vim.org/scripts/script.php?script_id=294>
+"        to do the column formatting and assumes that '|' character is
+"        the column separator
+"===========================================================================
 function! DBextPostResult(db_type, buf_nr)
-    " ==========================================================
-    " If dealing with a SQL Server SQL query,
-    " nicely format the query results.
-    "
-    " Note: It uses Align.vim plugin to do the formatting
-    " ==========================================================
+  " Highlight the column names in the result table's header row
+  " Define colour scheme. (Or you can use an existing name like 'Comment' etc.)
+  hi TableHead guifg=NONE guibg=#262D51 gui=NONE ctermfg=NONE ctermbg=red cterm=NONE
+  " 1. Find the header row and the borders above and below it
+  syn match tableHead /+-.*+\n|.*\n+-.*\n|/he=e-1 contains=headText,divRow
+  " 2. Find the column names to colour
+  syn match headText /[^|]\+/ contained
+  " 3. Exclude the border rows above and below
+  syn match divRow /^+-.*/ contained
+  " 4. Set the text colouring for the column headers
+  hi link headText TableHead
 
-    if a:db_type == 'SQLSRV'
-      let pos = 1
-      let headerRow = 1
-      let divRow = 1
-      let endRow = 1
-      let isEndRowSet = 1
-      let allLines = getbufline(a:buf_nr, 1, "$")
-      let rangeList = []
+  if a:db_type == 'SQLSRV'
+    let pos = 1
+    let headerRow = 1
+    let divRow = 1
+    let endRow = 1
+    let isEndRowSet = 1
+    let allLines = getbufline(a:buf_nr, 1, "$")
+    let rangeList = []
 
-      " Find the result sets in the buffer.
-      " Two fixed markers we can look for to figure out table start/end.
-      " These are:
-      "       "----"      dashed line between table header and detail row and
-      "       "affected)" just below the end of result set if SET NOCOUNT OFF
-      "                   is set for the query.
-      " Note: some queries may return a result set without a column header row
-      "       for instance "SELECT COUNT(*) FROM TABLE XYZ"
+    " Find the result sets in the buffer.
+    " Two fixed markers we can look for to figure out table start/end.
+    " These are:
+    "       "----"      dashed line between table header and detail row and
+    "       "affected)" just below the end of result set if SET NOCOUNT OFF
+    "                   is set for the query.
+    " Note: some queries may return a result set without a column header row
+    "       for instance "SELECT COUNT(*) FROM TABLE XYZ"
 
-      if string(allLines) =~ "----"
-        for line in allLines
-          if line =~ "----"
-            " A new div line found.
-            if !isEndRowSet
-              " Figure set endRow position
-              if (pos - divRow) == 2
-                let endRow = pos - 1
-              else
-                let endRow = pos - 2
-              endif
-              call add(rangeList, [headerRow, divRow, endRow])
-              let isEndRowSet = 1
-            endif
-            " New range starts
-            let divRow = pos
-            if (pos - endRow) == 1 || allLines[pos-1-1] =~ "affected)"
-              " No header
-              let headerRow = pos
+    if string(allLines) =~ "----"
+      for line in allLines
+        if line =~ "----"
+          " A new div line found.
+          if !isEndRowSet
+            " Figure set endRow position
+            if (pos - divRow) == 2
+              let endRow = pos - 1
             else
-              let headerRow = pos - 1
+              let endRow = pos - 2
             endif
-            let endRow = len(allLines)
-            let isEndRowSet = 0
-          endif
-          if line =~ "affected)"
-            " End of current table found
-            let endRow = pos-1
             call add(rangeList, [headerRow, divRow, endRow])
             let isEndRowSet = 1
           endif
-          let pos += 1
-        endfor
-      endif
-
-      if !isEndRowSet
-        call add(rangeList, [headerRow, divRow, endRow])
-      endif
-
-      " Format each result set in the buffer
-      let offset = 0
-      for range in rangeList
-        " Get the range of the current table
-        let headRow = range[0] + offset
-        let divRow  = range[1] + offset
-        let endRow  = range[2] + offset
-
-        " Set the text in the header lower case
-        execute headRow . "normal 0gu$"
-        " Draw missing left and right hand side borders
-        execute headRow ."," .  endRow . " normal I|"
-        execute headRow ."," .  endRow . " normal A|"
-        " Align each column width to the widest entry in that column
-        execute divRow . "s/-//g"
-        execute "AlignCtrl p0P0"
-        execute headRow . "," . endRow . "Align |"
-        " Restore horizontal border line and tidy up corners
-        execute divRow . "s/ /-/g"
-        execute divRow . "s/|-/+-/g"
-        execute divRow . "s/-|/-+/g"
-        " Add top and bottom horizontal dividers
-        execute divRow . "y"
-        if headRow != divRow
-          execute headRow  . "normal P"
-          execute endRow  + 1 . "normal p"
-          let offset +=2  " two new rows inserted
-        else
-          execute endRow . "normal p"
-          let offset +=1
+          " New range starts
+          let divRow = pos
+          if (pos - endRow) == 1 || allLines[pos-1-1] =~ "affected)"
+            " No header
+            let headerRow = pos
+          else
+            let headerRow = pos - 1
+          endif
+          let endRow = len(allLines)
+          let isEndRowSet = 0
         endif
+        if line =~ "affected)"
+          " End of current table found
+          let endRow = pos-1
+          call add(rangeList, [headerRow, divRow, endRow])
+          let isEndRowSet = 1
+        endif
+        let pos += 1
       endfor
-      normal gg
     endif
-    " Clear highlighting for previously matched characters
-    let @/ = ""
 
+    if !isEndRowSet
+      call add(rangeList, [headerRow, divRow, endRow])
+    endif
+
+    " Format each result set in the buffer
+    let offset = 0
+    for range in rangeList
+      " Get the range of the current table
+      let headRow = range[0] + offset
+      let divRow  = range[1] + offset
+      let endRow  = range[2] + offset
+
+      " Set the text in the header lower case
+      execute headRow . "normal 0gu$"
+      " Draw missing left and right hand side borders
+      execute headRow ."," .  endRow . " normal I|"
+      execute headRow ."," .  endRow . " normal A|"
+      " Align each column width to the widest entry in that column
+      execute divRow . "s/-//g"
+      execute "AlignCtrl p0P0"
+      execute headRow . "," . endRow . "Align |"
+      " Restore horizontal border line and tidy up corners
+      execute divRow . "s/ /-/g"
+      execute divRow . "s/|-/+-/g"
+      execute divRow . "s/-|/-+/g"
+      " Add top and bottom horizontal dividers
+      execute divRow . "y"
+      if headRow != divRow
+        execute headRow  . "normal P"
+        execute endRow  + 1 . "normal p"
+        let offset +=2  " two new rows inserted
+      else
+        execute endRow . "normal p"
+        let offset +=1
+      endif
+    endfor
+    normal gg
+  endif
+  " Clear highlighting for previously matched characters
+  let @/ = ""
 endfunction
 
 
