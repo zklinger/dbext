@@ -2855,6 +2855,7 @@ function! s:DB_MYSQL_getStoredProcBody(proc)
     \ "'CREATE DEFINER=`', replace(definer, '@','`@`'), '` PROCEDURE `', name, '`(', " .
     \ "cast(param_list as char), " .
     \ "')\n', " .
+    \ "'COMMENT \''', cast(comment as char), '\''\n\n', " .
     \ "cast(body as char), ' $$\n\n', " .
     \ "'DELIMITER ;') as 'BODY' " .
     \ "from mysql.proc " .
@@ -2901,6 +2902,7 @@ function! s:DB_MYSQL_getStoredProcTemplate(proc)
                  \ "CREATE DEFINER=" .definer. " PROCEDURE `" .a:proc. "`(\n" . 
                  \ "  _varX INT\n" .
                  \ ")\n" . 
+                 \ "COMMENT '$Rev$'\n" .
                  \ "BEGIN\n" .
                  \ "-- ========================================================================\n" .
                  \ "-- Author     : " .user. "\n" . 
